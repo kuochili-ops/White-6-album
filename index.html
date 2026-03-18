@@ -12,30 +12,22 @@
     <style>
         :root { --primary: #00b900; --bg: #1a1a1a; --card: #2d2d2d; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; overflow-x: hidden; }
-        
-        /* 介面容器 */
         .container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; box-sizing: border-box; }
         #setup-ui { width: 100%; max-width: 400px; background: var(--card); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; }
         .logo { font-size: 50px; margin-bottom: 10px; }
-        
-        /* 相簿列表樣式 */
-        .album-list { max-height: 250px; overflow-y: auto; background: #111; border-radius: 10px; margin: 15px 0; text-align: left; border: 1px solid #444; }
+        .album-list { max-height: 250px; overflow-y: auto; background: #111; border-radius: 10px; margin: 15px 0; text-align: left; border: 1px solid #444; min-height: 100px; }
         .album-item { padding: 12px; border-bottom: 1px solid #333; cursor: pointer; display: flex; align-items: center; transition: 0.2s; }
         .album-item:hover { background: #333; }
         .album-item img { width: 45px; height: 45px; object-fit: cover; margin-right: 12px; border-radius: 6px; }
-        
-        /* 輸入元件樣式 */
         input, button { width: 100%; padding: 14px; border-radius: 30px; border: none; font-size: 16px; margin-top: 10px; box-sizing: border-box; }
         input { background: #000; color: #fff; border: 1px solid #444; }
         button { background: var(--primary); color: #fff; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:disabled { background: #555; cursor: not-allowed; }
-
-        /* 相簿翻閱介面 (收訊者) */
         #album-view { display: none; width: 100vw; height: 100vh; align-items: center; justify-content: center; background: #222; }
-        .page { background: #fff; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: inset 0 0 30px rgba(0,0,0,0.1); }
-        .page img { width: 90%; height: 85%; object-fit: contain; cursor: zoom-in; }
-        .page-content { padding: 30px; text-align: center; color: #333; }
+        .page { background: #fff; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .page img { width: 90%; height: 85%; object-fit: contain; }
         .hidden { display: none; }
+        .line-notice { font-size: 13px; color: #ffcc00; margin-top: 15px; border: 1px dashed #ffcc00; padding: 10px; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -46,15 +38,18 @@
         <h2 style="margin:0 0 10px 0;">白六分享相簿</h2>
         
         <div id="auth-box">
-            <p style="color:#aaa; font-size:14px;">請先登入 Google 以讀取您的相簿目錄</p>
+            <p style="color:#aaa; font-size:14px;">請登入 Google 以讀取您的相簿目錄</p>
             <button onclick="handleGoogleAuth()">登入 Google 帳號</button>
+            <div id="line-hint" class="line-notice hidden">
+                ⚠️ 偵測到 LINE 瀏覽器：<br>請點擊右上角「...」並選擇「在預設瀏覽器中開啟」以進行登入。
+            </div>
         </div>
 
         <div id="selector-box" class="hidden">
-            <p style="font-size:14px; color:var(--primary);">已成功連線！請選擇一個相簿：</p>
-            <div id="album-list" class="album-list">載入相簿中...</div>
-            <input type="text" id="user-msg" placeholder="輸入想對收訊者說的話...">
-            <button id="share-btn" disabled onclick="sendFlexMessage()">分享實體感相簿</button>
+            <p style="font-size:14px; color:var(--primary);">已成功連線！請選擇相簿：</p>
+            <div id="album-list" class="album-list">載入中...</div>
+            <input type="text" id="user-msg" placeholder="寫些話給收訊者...">
+            <button id="share-btn" disabled onclick="sendFlexMessage()">發送 LINE 分享卡片</button>
         </div>
     </div>
 </div>
@@ -66,7 +61,6 @@
 <script type="module">
     import PhotoSwipeLightbox from 'https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe-lightbox.esm.min.js';
 
-    // 專屬配置
     const CONFIG = {
         CLIENT_ID: '926483239392-mbn8nv60mgh6kk4s5joaemnhao5kv46p.apps.googleusercontent.com',
         LIFF_ID: '2009222789-M8aFcFM7',
@@ -76,23 +70,27 @@
     let googleToken = '';
     let selectedPhotos = [];
 
-    // 初始化程式
     async function init() {
         try {
             await liff.init({ liffId: CONFIG.LIFF_ID });
+            // 檢查是否在 LINE 內建瀏覽器中，如果是則顯示提示
+            if (/Line/i.test(navigator.userAgent)) {
+                document.getElementById('line-hint').classList.remove('hidden');
+            }
+
             const params = new URLSearchParams(window.location.search);
             const imgs = params.get('imgs');
-            const msg = params.get('msg');
-
-            if (imgs) {
-                // 如果 URL 有圖片參數，進入收訊者翻書模式
-                renderBook(decodeURIComponent(imgs).split(','), decodeURIComponent(msg || "送你一本精美相簿"));
-            }
-        } catch (e) { console.error("LIFF 初始化失敗", e); }
+            if (imgs) renderBook(decodeURIComponent(imgs).split(','), decodeURIComponent(params.get('msg') || "送你一本相簿"));
+        } catch (e) { console.error("LIFF Init Failed", e); }
     }
 
-    // --- 發送者功能：Google OAuth ---
     window.handleGoogleAuth = function() {
+        // 如果在 LINE 內，提示使用外部瀏覽器
+        if (/Line/i.test(navigator.userAgent)) {
+            alert("LINE 會阻擋登入視窗，請點選右上角『...』並選擇『在預設瀏覽器中開啟』再登入。");
+            return;
+        }
+
         const client = google.accounts.oauth2.initTokenClient({
             client_id: CONFIG.CLIENT_ID,
             scope: CONFIG.SCOPES,
@@ -109,48 +107,45 @@
     async function loadAlbums() {
         document.getElementById('auth-box').classList.add('hidden');
         document.getElementById('selector-box').classList.remove('hidden');
+        const listEl = document.getElementById('album-list');
         
         try {
-            const res = await fetch('https://photoslibrary.googleapis.com/v1/albums', {
+            const res = await fetch('https://photoslibrary.googleapis.com/v1/albums?pageSize=50', {
                 headers: { 'Authorization': `Bearer ${googleToken}` }
             });
             const data = await res.json();
-            const listEl = document.getElementById('album-list');
             listEl.innerHTML = '';
 
             if (data.albums) {
                 data.albums.forEach(album => {
                     const div = document.createElement('div');
                     div.className = 'album-item';
-                    div.innerHTML = `
-                        <img src="${album.coverPhotoBaseUrl}=w100-h100-c">
-                        <div><strong>${album.title}</strong><br><small>${album.mediaItemsCount} 張照片</small></div>
-                    `;
+                    div.innerHTML = `<img src="${album.coverPhotoBaseUrl}=w100-h100-c"><div><strong>${album.title}</strong><br><small>${album.mediaItemsCount} 張</small></div>`;
                     div.onclick = () => selectAlbum(album.id);
                     listEl.appendChild(div);
                 });
             } else {
-                listEl.innerHTML = '<p style="padding:10px; font-size:12px;">找不到相簿，請確認帳號內是否有子目錄。</p>';
+                listEl.innerHTML = '<p style="padding:10px; font-size:12px; color:#ffcc00;">找不到相簿！請確認權限已勾選且帳號內有建立相簿資料夾。</p>';
             }
-        } catch (e) { console.error("獲取相簿失敗", e); }
+        } catch (e) { listEl.innerHTML = '載入 API 失敗，請檢查 Scope 設定。'; }
     }
 
     async function selectAlbum(id) {
         const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ albumId: id, pageSize: 20 }) // 限制 20 張以確保 LINE 連結長度
+            body: JSON.stringify({ albumId: id, pageSize: 15 }) 
         });
         const data = await res.json();
         selectedPhotos = data.mediaItems.map(item => item.baseUrl);
         document.getElementById('share-btn').disabled = false;
-        alert("相簿選取成功！");
+        alert("相簿讀取成功！共 " + selectedPhotos.length + " 張照片。");
     }
 
     window.sendFlexMessage = async function() {
-        const userMsg = document.getElementById('user-msg').value || "送你一本實體感相簿";
+        const msg = document.getElementById('user-msg').value || "送你一本精美相簿";
         const photosParam = encodeURIComponent(selectedPhotos.join(','));
-        const shareUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?imgs=${photosParam}&msg=${encodeURIComponent(userMsg)}`;
+        const shareUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?imgs=${photosParam}&msg=${encodeURIComponent(msg)}`;
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
@@ -163,7 +158,7 @@
                         "type": "box", "layout": "vertical",
                         "contents": [
                             { "type": "text", "text": "𓃥 白六分享相簿", "weight": "bold", "size": "xl", "color": "#00b900" },
-                            { "type": "text", "text": userMsg, "margin": "md", "size": "sm", "color": "#666666" }
+                            { "type": "text", "text": msg, "margin": "md", "size": "sm", "color": "#666666" }
                         ]
                     },
                     "footer": {
@@ -176,54 +171,24 @@
         }
     };
 
-    // --- 收訊者功能：翻閱相簿 ---
     function renderBook(imgs, msg) {
         document.getElementById('setup-ui-container').style.display = 'none';
         const view = document.getElementById('album-view');
         view.style.display = 'flex';
         const albumEl = document.getElementById('my-album');
 
-        // 封面製作
-        let html = `
-            <div class="page" data-density="hard">
-                <div class="page-content">
-                    <div style="font-size:50px">𓃥</div>
-                    <h2 style="border-bottom: 2px solid var(--primary); padding-bottom:10px">白六相簿館</h2>
-                    <p style="margin-top:30px; font-weight:bold;">"${msg}"</p>
-                    <p style="font-size:12px;color:#999;margin-top:60px;">⬅️ 左右滑動開始翻閱</p>
-                </div>
-            </div>`;
-
-        // 動態生成照片頁
+        let html = `<div class="page" data-density="hard"><div style="text-align:center;padding:40px;color:#333;"><h1>𓃥</h1><h2>白六相簿館</h2><p>"${msg}"</p></div></div>`;
         imgs.forEach((url, i) => {
-            html += `
-                <div class="page">
-                    <a href="${url}=d" data-pswp-width="1200" data-pswp-height="1600" target="_blank">
-                        <img src="${url}=w1000" loading="lazy">
-                    </a>
-                    <p style="font-size:10px;color:#ccc;">- ${i+1} -</p>
-                </div>`;
+            html += `<div class="page"><a href="${url}=d" target="_blank"><img src="${url}=w1000" loading="lazy"></a><p style="color:#ccc;font-size:10px;">- ${i+1} -</p></div>`;
         });
-
-        // 封底
-        html += `<div class="page" data-density="hard"><div class="page-content"><h3>THE END</h3><p>𓃥 白六分享 APP</p></div></div>`;
+        html += `<div class="page" data-density="hard"><div style="padding:40px;color:#333;"><h3>THE END</h3><p>𓃥 白六分享</p></div></div>`;
         
         albumEl.innerHTML = html;
-
-        // 初始化翻頁元件
-        const pageFlip = new St.PageFlip(albumEl, { 
-            width: 400, 
-            height: 600, 
-            size: "stretch", 
-            showCover: true,
-            mobileScrollSupport: false 
-        });
+        const pageFlip = new St.PageFlip(albumEl, { width: 400, height: 600, size: "stretch", showCover: true });
         pageFlip.loadFromHTML(document.querySelectorAll(".page"));
 
-        // 初始化 PhotoSwipe 放大鏡
         const lightbox = new PhotoSwipeLightbox({
-            gallery: '#my-album', 
-            children: 'a',
+            gallery: '#my-album', children: 'a',
             pswpModule: () => import('https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe.esm.min.js')
         });
         lightbox.init();
