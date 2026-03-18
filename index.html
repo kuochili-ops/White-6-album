@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>𓃥 白六分享相簿 APP</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        :root { --primary: #00b900; --bg: #121212; }
+        body { background: var(--bg); color: #fff; font-family: sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        #setup-ui { width: 90%; max-content: 400px; background: #222; padding: 20px; border-radius: 15px; text-align: center; }
+        .album-list { max-height: 300px; overflow-y: auto; margin: 15px 0; text-align: left; background: #111; border-radius: 8px; }
+        .album-item { padding: 10px; border-bottom: 1px solid #333; cursor: pointer; display: flex; align-items: center; }
+        .album-item:hover { background: #333; }
+        .album-item img { width: 40px; height: 40px; object-fit: cover; margin-right: 10px; border-radius: 4px; }
+        button { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 25px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="setup-ui">
+    <div style="font-size: 30px;">𓃥</div>
+    <h2>白六相簿製作後台</h2>
+    
+    <div id="auth-section">
+        <p>請先登入 Google 以讀取您的相簿目錄</p>
+        <button onclick="handleAuth()">登入 Google 相簿</button>
+    </div>
+
+    <div id="select-section" class="hidden">
+        <p>請選擇一個相簿子目錄：</p>
+        <div id="list-container" class="album-list">載入中...</div>
+        <input type="text" id="user-msg" placeholder="想對朋友說的話..." style="width:100%; padding:10px; box-sizing:border-box; margin-bottom:10px; border-radius:5px; border:none;">
+        <button id="share-btn" class="hidden" onclick="generateShare()">分享至 LINE</button>
+    </div>
+</div>
+
+<script>
+    const CLIENT_ID = '926483239392-mbn8nv60mgh6kk4s5joaemnhao5kv46p.apps.googleusercontent.com';
+    let accessToken = '';
+    let selectedPhotos = [];
+
+    async function initLIFF() {
+        await liff.init({ liffId: "YOUR_LIFF_ID" });
+    }
+
+    // 1. 處理 Google 授權
+    function handleAuth() {
+        const client = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+            callback: (tokenResponse) => {
+                if (tokenResponse.access_token) {
+                    accessToken = tokenResponse.access_token;
+                    showAlbumSelector();
+                }
+            },
+        });
+        client.requestAccessToken();
+    }
+
+    // 2. 抓取相簿列表
+    async function showAlbumSelector() {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('select-section').classList.remove('hidden');
+        
+        const res = await fetch('https://photoslibrary.googleapis.com/v1/albums', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        const data = await res.json();
+        
+        const container = document.getElementById('list-container');
+        container.innerHTML = '';
+        
+        if (data.albums) {
+            data.albums.forEach(album => {
+                const item = document.createElement('div');
+                item.className = 'album-item';
+                item.innerHTML = `<img src="${album.coverPhotoBaseUrl}=w100-h100-c"><span>${album.title} (${album.mediaItemsCount})</span>`;
+                item.onclick = () => fetchPhotosFromAlbum(album.id);
+                container.appendChild(item);
+            });
+        } else {
+            container.innerHTML = '<p style="padding:10px">找不到相簿，請確認是否有建立子目錄。</p>';
+        }
+    }
+
+    // 3. 抓取選定相簿內的照片
+    async function fetchPhotosFromAlbum(albumId) {
+        const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ albumId: albumId, pageSize: 50 })
+        });
+        const data = await res.json();
+        // 這裡我們取 Google 的 baseUrl，並補上參數確保流暢度與下載
+        selectedPhotos = data.mediaItems.map(item => item.baseUrl);
+        
+        alert(`已選取該相簿中的 ${selectedPhotos.length} 張照片！`);
+        document.getElementById('share-btn').classList.remove('hidden');
+    }
+
+    // 4. 分享至 LINE (Flex Message)
+    async function generateShare() {
+        const msg = document.getElementById('user-msg').value || "送你一本精美相簿！";
+        // 為了網址長度限制，建議只傳前 10-15 張，或是使用更進階的短網址/資料庫做法
+        const photosParam = encodeURIComponent(selectedPhotos.slice(0, 15).join(','));
+        const shareUrl = `https://liff.line.me/YOUR_LIFF_ID?imgs=${photosParam}&msg=${encodeURIComponent(msg)}`;
+
+        await liff.shareTargetPicker([{
+            "type": "flex",
+            "altText": "𓃥 白六分享相簿給你了",
+            "contents": {
+                "type": "bubble",
+                "hero": { "type": "image", "url": selectedPhotos[0], "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                "body": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": "𓃥 白六分享相簿", "weight": "bold", "size": "xl", "color": "#00b900" },
+                        { "type": "text", "text": msg, "margin": "md", "size": "sm", "color": "#666666" }
+                    ]
+                },
+                "footer": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [{ "type": "button", "style": "primary", "color": "#00b900", "action": { "type": "uri", "label": "點我翻閱", "uri": shareUrl } }]
+                }
+            }
+        }]);
+        liff.closeWindow();
+    }
+
+    initLIFF();
+</script>
+</body>
+</html>
