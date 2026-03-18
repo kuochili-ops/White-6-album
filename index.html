@@ -60,6 +60,7 @@
     const CONFIG = {
         CLIENT_ID: '926483239392-mbn8nv60mgh6kk4s5joaemnhao5kv46p.apps.googleusercontent.com',
         LIFF_ID: '2009222789-M8aFcFM7',
+        // 確保 Scope 字串完全正確且無空格
         SCOPE: 'https://www.googleapis.com/auth/photoslibrary.readonly'
     };
 
@@ -75,12 +76,13 @@
         } catch (e) { console.error(e); }
     }
 
-    // Google 登入處理
+    // --- 修改重點：強制彈出同意畫面 ---
     window.handleGoogleAuth = function() {
         if (typeof google === 'undefined') return alert("SDK 加載中，請稍後");
         const client = google.accounts.oauth2.initTokenClient({
             client_id: CONFIG.CLIENT_ID,
             scope: CONFIG.SCOPE,
+            prompt: 'consent', // 強制彈出同意畫面，解決 insufficient scopes 問題
             callback: (res) => {
                 if (res.access_token) {
                     googleToken = res.access_token;
@@ -91,11 +93,11 @@
         client.requestAccessToken();
     };
 
-    // 載入相簿清單
     async function loadAlbums() {
         document.getElementById('auth-box').classList.add('hidden');
         document.getElementById('selector-box').classList.remove('hidden');
         const listEl = document.getElementById('album-list');
+        listEl.innerHTML = '正在搜尋相簿...';
         
         try {
             const res = await fetch('https://photoslibrary.googleapis.com/v1/albums?pageSize=50', {
@@ -104,7 +106,8 @@
             const data = await res.json();
 
             if (data.error) {
-                alert("Google API 錯誤：" + data.error.message);
+                // 如果看到紅字，這行會直接顯示 Google 回傳的真實原因
+                alert("Google API 拒絕讀取：" + data.error.message);
                 listEl.innerHTML = `<p style="padding:10px; color:red;">錯誤: ${data.error.message}</p>`;
                 return;
             }
@@ -119,12 +122,11 @@
                     listEl.appendChild(div);
                 });
             } else {
-                listEl.innerHTML = '<p style="padding:10px;">找不到相簿！請確認 Google 相簿內有手動建立的資料夾。</p>';
+                listEl.innerHTML = '<p style="padding:10px;">找不到相簿！<br>API 僅能讀取您手動建立的「相簿」資料夾，而非原始照片流。</p>';
             }
-        } catch (e) { listEl.innerHTML = '連線失敗'; }
+        } catch (e) { listEl.innerHTML = '網路連線失敗'; }
     }
 
-    // 選取相簿內照片
     async function selectAlbum(id) {
         const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
             method: 'POST',
@@ -135,11 +137,10 @@
         selectedPhotos = data.mediaItems ? data.mediaItems.map(item => item.baseUrl) : [];
         if (selectedPhotos.length > 0) {
             document.getElementById('share-btn').disabled = false;
-            alert(`已讀取 ${selectedPhotos.length} 張照片`);
+            alert(`已選取 ${selectedPhotos.length} 張照片，準備好可以分享囉！`);
         }
     }
 
-    // 分享 LINE 訊息
     window.sendFlexMessage = async function() {
         const msg = document.getElementById('user-msg').value || "送你一本相簿";
         const shareUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?imgs=${encodeURIComponent(selectedPhotos.join(','))}&msg=${encodeURIComponent(msg)}`;
@@ -158,14 +159,13 @@
         }
     };
 
-    // 渲染翻頁相簿
     function renderBook(imgs, msg) {
         document.getElementById('setup-ui-container').style.display = 'none';
         const view = document.getElementById('album-view');
         view.style.display = 'flex';
         const albumEl = document.getElementById('my-album');
 
-        let html = `<div class="page" data-density="hard"><div style="text-align:center;"><h2>𓃥 白六相簿</h2><p>${msg}</p></div></div>`;
+        let html = `<div class="page" data-density="hard"><div style="text-align:center; padding:20px;"><h2>𓃥 白六相簿</h2><p>${msg}</p></div></div>`;
         imgs.forEach(url => {
             html += `<div class="page"><a href="${url}=d" target="_blank"><img src="${url}=w1000"></a></div>`;
         });
