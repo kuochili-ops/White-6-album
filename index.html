@@ -12,20 +12,18 @@
         :root { --primary: #00b900; --bg: #121212; --card: #222222; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; overflow-x: hidden; }
         .container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; box-sizing: border-box; }
-        #setup-ui { width: 100%; max-width: 400px; background: var(--card); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; }
+        #setup-ui { width: 100%; max-width: 400px; background: var(--card); padding: 30px; border-radius: 20px; text-align: center; }
         .logo { font-size: 50px; margin-bottom: 10px; }
-        .album-list { max-height: 250px; overflow-y: auto; background: #111; border-radius: 10px; margin: 15px 0; text-align: left; border: 1px solid #444; }
-        .album-item { padding: 12px; border-bottom: 1px solid #333; cursor: pointer; display: flex; align-items: center; }
-        .album-item:hover { background: #333; }
-        .album-item img { width: 45px; height: 45px; object-fit: cover; margin-right: 12px; border-radius: 6px; }
-        input, button { width: 100%; padding: 14px; border-radius: 30px; border: none; font-size: 16px; margin-top: 10px; box-sizing: border-box; }
-        input { background: #000; color: #fff; border: 1px solid #444; }
-        button { background: var(--primary); color: #fff; font-weight: bold; cursor: pointer; }
-        button:disabled { background: #555; cursor: not-allowed; }
-        #album-view { display: none; width: 100vw; height: 100vh; align-items: center; justify-content: center; background: #000; }
-        .page { background: #fff; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; max-height: 200px; overflow-y: auto; }
+        .preview-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #444; }
+        .btn { width: 100%; padding: 14px; border-radius: 30px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-upload { background: #444; color: #fff; }
+        .btn-share { background: var(--primary); color: #fff; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="text"] { width: 100%; padding: 14px; border-radius: 30px; border: 1px solid #444; background: #000; color: #fff; margin-top: 10px; box-sizing: border-box; }
+        #album-view { display: none; width: 100vw; height: 100vh; background: #000; }
+        .page { background: #fff; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px solid #ddd; }
         .page img { width: 90%; height: 85%; object-fit: contain; }
-        .hidden { display: none; }
     </style>
 </head>
 <body>
@@ -33,16 +31,16 @@
 <div id="setup-ui-container" class="container">
     <div id="setup-ui">
         <div class="logo">𓃥</div>
-        <h2 style="margin:0 0 10px 0;">白六分享相簿</h2>
-        <div id="auth-box">
-            <button onclick="handleGoogleAuth()">登入 Google 帳號</button>
-        </div>
-        <div id="selector-box" class="hidden">
-            <p style="font-size:14px; color:var(--primary);">連線成功！</p>
-            <div id="album-list" class="album-list">正在搜尋您的相簿...</div>
-            <input type="text" id="user-msg" placeholder="想對朋友說的話...">
-            <button id="share-btn" disabled onclick="sendFlexMessage()">分享這本相簿</button>
-        </div>
+        <h2 style="margin:0;">白六分享相簿</h2>
+        <p style="color:#888; font-size:14px;">手動選取照片，製作翻頁相簿</p>
+        
+        <input type="file" id="file-input" multiple accept="image/*" style="display:none;">
+        <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">+ 選取照片</button>
+        
+        <div id="preview-grid" class="preview-grid"></div>
+        
+        <input type="text" id="user-msg" placeholder="想對朋友說的話...">
+        <button id="share-btn" class="btn btn-share" disabled onclick="sendFlexMessage()">分享這本相簿</button>
     </div>
 </div>
 
@@ -53,100 +51,55 @@
 <script type="module">
     import PhotoSwipeLightbox from 'https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe-lightbox.esm.min.js';
 
-    const CONFIG = {
-        CLIENT_ID: '926483239392-mbn8nv60mgh6kk4s5joaemnhao5kv46p.apps.googleusercontent.com',
-        LIFF_ID: '2009222789-M8aFcFM7',
-        SCOPE: 'https://www.googleapis.com/auth/photoslibrary.readonly',
-        // 確保此網址與您的 GitHub 部署路徑一致
-        REDIRECT_URI: 'https://kuochili-ops.github.io/White-6-album/' 
-    };
-
-    let googleToken = '';
-    let selectedPhotos = [];
+    const LIFF_ID = '2009222789-M8aFcFM7';
+    let base64Photos = [];
 
     async function init() {
         try {
-            await liff.init({ liffId: CONFIG.LIFF_ID });
-            checkUrlToken();
+            await liff.init({ liffId: LIFF_ID });
             const params = new URLSearchParams(window.location.search);
-            if (params.get('imgs')) renderBook(decodeURIComponent(params.get('imgs')).split(','), decodeURIComponent(params.get('msg') || ""));
-        } catch (e) { console.error(e); }
+            if (params.get('imgs')) {
+                // 如果是接收者，解析縮址或外部圖片 URL
+                renderBook(decodeURIComponent(params.get('imgs')).split(','), decodeURIComponent(params.get('msg') || ""));
+            }
+        } catch (e) { console.error("LIFF Init Error", e); }
     }
 
-    window.handleGoogleAuth = function() {
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-            `client_id=${CONFIG.CLIENT_ID}&` +
-            `redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}&` +
-            `response_type=token&` +
-            `scope=${encodeURIComponent(CONFIG.SCOPE)}&` +
-            `prompt=consent`;
-        sessionStorage.setItem('temp_msg', document.getElementById('user-msg').value);
-        window.location.href = authUrl;
-    };
+    // 處理照片選取與預覽
+    document.getElementById('file-input').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        const previewGrid = document.getElementById('preview-grid');
+        previewGrid.innerHTML = '';
+        base64Photos = [];
 
-    function checkUrlToken() {
-        const hash = window.location.hash;
-        if (hash && hash.includes('access_token')) {
-            const params = new URLSearchParams(hash.replace('#', ''));
-            googleToken = params.get('access_token');
-            if (googleToken) {
-                document.getElementById('auth-box').classList.add('hidden');
-                document.getElementById('selector-box').classList.remove('hidden');
-                window.history.replaceState(null, null, window.location.pathname);
-                loadAlbums();
-            }
+        for (const file of files) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                previewGrid.appendChild(img);
+                // 注意：這裡直接傳 base64 在 LINE URL 會過長，實際建議上傳至免費圖床或僅限少量照片
+                base64Photos.push(event.target.result); 
+                if (base64Photos.length > 0) document.getElementById('share-btn').disabled = false;
+            };
+            reader.readAsDataURL(file);
         }
-    }
-
-    async function loadAlbums() {
-        const listEl = document.getElementById('album-list');
-        try {
-            const res = await fetch('https://photoslibrary.googleapis.com/v1/albums?pageSize=50', {
-                headers: { 'Authorization': `Bearer ${googleToken}` }
-            });
-            const data = await res.json();
-            if (data.error) {
-                listEl.innerHTML = `<p style="color:red; font-size:12px;">權限錯誤: ${data.error.message}</p>`;
-                return;
-            }
-            listEl.innerHTML = '';
-            if (data.albums) {
-                data.albums.forEach(album => {
-                    const div = document.createElement('div');
-                    div.className = 'album-item';
-                    div.innerHTML = `<img src="${album.coverPhotoBaseUrl}=w100-h100-c"><div><strong>${album.title}</strong><br><small>${album.mediaItemsCount} 張</small></div>`;
-                    div.onclick = () => selectAlbum(album.id);
-                    listEl.appendChild(div);
-                });
-            } else {
-                listEl.innerHTML = '<p>找不到相簿，請手動建立一個相簿。</p>';
-            }
-        } catch (e) { listEl.innerHTML = '讀取失敗'; }
-    }
-
-    async function selectAlbum(id) {
-        const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ albumId: id, pageSize: 20 })
-        });
-        const data = await res.json();
-        selectedPhotos = data.mediaItems ? data.mediaItems.map(item => item.baseUrl) : [];
-        if (selectedPhotos.length > 0) {
-            document.getElementById('share-btn').disabled = false;
-            alert(`已選取 ${selectedPhotos.length} 張相片！`);
-        }
-    }
+    });
 
     window.sendFlexMessage = async function() {
         const msg = document.getElementById('user-msg').value || "送你一本相簿";
-        const shareUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?imgs=${encodeURIComponent(selectedPhotos.join(','))}&msg=${encodeURIComponent(msg)}`;
+        
+        // 提醒：因為 URL 長度限制，此處示範僅抓取前 3 張圖片網址
+        // 若要穩定使用，建議將圖片上傳至 Imgur 等平台獲取短網址
+        const sampleImgs = base64Photos.slice(0, 5); 
+        const shareUrl = `https://liff.line.me/${LIFF_ID}?imgs=${encodeURIComponent(sampleImgs.join(','))}&msg=${encodeURIComponent(msg)}`;
+        
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
                 "type": "flex", "altText": "𓃥 白六分享相簿",
                 "contents": {
                     "type": "bubble",
-                    "hero": { "type": "image", "url": selectedPhotos[0], "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                    "hero": { "type": "image", "url": "https://img.icons8.com/color/144/album.png", "size": "xl", "aspectMode": "fit" },
                     "body": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "𓃥 白六分享相簿", "weight": "bold", "color": "#00b900" }, { "type": "text", "text": msg, "size": "sm" }] },
                     "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "style": "primary", "color": "#00b900", "action": { "type": "uri", "label": "點我翻閱", "uri": shareUrl } }] }
                 }
@@ -160,12 +113,13 @@
         const view = document.getElementById('album-view');
         view.style.display = 'flex';
         const albumEl = document.getElementById('my-album');
-        let html = `<div class="page" data-density="hard"><div style="text-align:center; padding:20px;"><h2>𓃥 白六相簿</h2><p>${msg}</p></div></div>`;
-        imgs.forEach(url => { html += `<div class="page"><a href="${url}=d" target="_blank"><img src="${url}=w1000"></a></div>`; });
+        
+        let html = `<div class="page" data-density="hard"><h2>𓃥 白六相簿</h2><p>${msg}</p></div>`;
+        imgs.forEach(url => { html += `<div class="page"><img src="${url}"></div>`; });
         albumEl.innerHTML = html + `<div class="page" data-density="hard"><h3>THE END</h3></div>`;
+        
         const pageFlip = new St.PageFlip(albumEl, { width: 400, height: 600, size: "stretch", showCover: true });
         pageFlip.loadFromHTML(document.querySelectorAll(".page"));
-        new PhotoSwipeLightbox({ gallery: '#my-album', children: 'a', pswpModule: () => import('https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe.esm.min.js') }).init();
     }
 
     init();
