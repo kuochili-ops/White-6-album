@@ -34,14 +34,11 @@
     <div id="setup-ui">
         <div class="logo">𓃥</div>
         <h2 style="margin:0 0 10px 0;">白六分享相簿</h2>
-        
         <div id="auth-box">
-            <p style="color:#aaa; font-size:14px;">點擊以完成 Google 相簿授權</p>
             <button onclick="handleGoogleAuth()">登入 Google 帳號</button>
         </div>
-
         <div id="selector-box" class="hidden">
-            <p id="status-text" style="font-size:14px; color:var(--primary);">連線成功！</p>
+            <p style="font-size:14px; color:var(--primary);">連線成功！</p>
             <div id="album-list" class="album-list">載入相簿中...</div>
             <input type="text" id="user-msg" placeholder="想對朋友說的話...">
             <button id="share-btn" disabled onclick="sendFlexMessage()">分享這本相簿</button>
@@ -59,7 +56,9 @@
     const CONFIG = {
         CLIENT_ID: '926483239392-mbn8nv60mgh6kk4s5joaemnhao5kv46p.apps.googleusercontent.com',
         LIFF_ID: '2009222789-M8aFcFM7',
-        SCOPE: 'https://www.googleapis.com/auth/photoslibrary.readonly'
+        SCOPE: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+        // 【關鍵修正】：路徑必須包含 White-6-album
+        REDIRECT_URI: 'https://kuochili-ops.github.io/White-6-album/' 
     };
 
     let googleToken = '';
@@ -68,46 +67,37 @@
     async function init() {
         try {
             await liff.init({ liffId: CONFIG.LIFF_ID });
-            
-            // 檢查 URL Hash 中是否帶有 Access Token
             checkUrlToken();
-
             const params = new URLSearchParams(window.location.search);
-            const imgs = params.get('imgs');
-            if (imgs) renderBook(decodeURIComponent(imgs).split(','), decodeURIComponent(params.get('msg') || ""));
+            if (params.get('imgs')) renderBook(decodeURIComponent(params.get('imgs')).split(','), decodeURIComponent(params.get('msg') || ""));
         } catch (e) { console.error(e); }
     }
 
-    // 修正點：統一 redirectUri 並加入 prompt=consent 強制彈出勾選視窗
     window.handleGoogleAuth = function() {
-        const redirectUri = 'https://kuochili-ops.github.io/'; 
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
             `client_id=${CONFIG.CLIENT_ID}&` +
-            `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+            `redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}&` +
             `response_type=token&` +
             `scope=${encodeURIComponent(CONFIG.SCOPE)}&` +
             `prompt=consent`;
-
         sessionStorage.setItem('temp_msg', document.getElementById('user-msg').value);
         window.location.href = authUrl;
     };
 
     function checkUrlToken() {
+        // 從網址 hash 抓取 Token
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
             const params = new URLSearchParams(hash.replace('#', ''));
             googleToken = params.get('access_token');
             
-            const savedMsg = sessionStorage.getItem('temp_msg');
-            if (savedMsg) document.getElementById('user-msg').value = savedMsg;
-
-            document.getElementById('auth-box').classList.add('hidden');
-            document.getElementById('selector-box').classList.remove('hidden');
-            
-            // 清理網址雜訊
-            window.history.replaceState(null, null, window.location.pathname);
-            
-            loadAlbums();
+            if (googleToken) {
+                document.getElementById('auth-box').classList.add('hidden');
+                document.getElementById('selector-box').classList.remove('hidden');
+                // 清理網址，避免重複載入
+                window.history.replaceState(null, null, window.location.pathname);
+                loadAlbums();
+            }
         }
     }
 
@@ -118,15 +108,15 @@
                 headers: { 'Authorization': `Bearer ${googleToken}` }
             });
             const data = await res.json();
-
+            
             if (data.error) {
-                alert("Google 授權錯誤：" + data.error.message);
-                listEl.innerHTML = `<p style="color:red; font-size:12px;">權限不足: ${data.error.message}</p>`;
+                // 如果權限不夠，會在這裡噴紅字
+                listEl.innerHTML = `<p style="color:red; font-size:12px;">權限錯誤: ${data.error.message}</p>`;
                 return;
             }
 
             listEl.innerHTML = '';
-            if (data.albums && data.albums.length > 0) {
+            if (data.albums) {
                 data.albums.forEach(album => {
                     const div = document.createElement('div');
                     div.className = 'album-item';
@@ -135,9 +125,9 @@
                     listEl.appendChild(div);
                 });
             } else {
-                listEl.innerHTML = '<p style="padding:10px;">找不到相簿！請確認 Google 相簿中已有建立好的相簿資料夾。</p>';
+                listEl.innerHTML = '<p>找不到相簿，請手動建立一個相簿。</p>';
             }
-        } catch (e) { listEl.innerHTML = '網路連線異常'; }
+        } catch (e) { listEl.innerHTML = '讀取失敗'; }
     }
 
     async function selectAlbum(id) {
@@ -150,47 +140,10 @@
         selectedPhotos = data.mediaItems ? data.mediaItems.map(item => item.baseUrl) : [];
         if (selectedPhotos.length > 0) {
             document.getElementById('share-btn').disabled = false;
-            alert(`成功讀取 ${selectedPhotos.length} 張照片！`);
+            alert(`已成功抓取 ${selectedPhotos.length} 張相片！`);
         }
     }
 
     window.sendFlexMessage = async function() {
         const msg = document.getElementById('user-msg').value || "送你一本相簿";
-        const shareUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?imgs=${encodeURIComponent(selectedPhotos.join(','))}&msg=${encodeURIComponent(msg)}`;
-        
-        if (liff.isApiAvailable('shareTargetPicker')) {
-            await liff.shareTargetPicker([{
-                "type": "flex", "altText": "𓃥 白六分享相簿",
-                "contents": {
-                    "type": "bubble",
-                    "hero": { "type": "image", "url": selectedPhotos[0], "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
-                    "body": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "𓃥 白六分享相簿", "weight": "bold", "color": "#00b900" }, { "type": "text", "text": msg, "size": "sm" }] },
-                    "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "style": "primary", "color": "#00b900", "action": { "type": "uri", "label": "點我翻閱", "uri": shareUrl } }] }
-                }
-            }]);
-            liff.closeWindow();
-        }
-    };
-
-    function renderBook(imgs, msg) {
-        document.getElementById('setup-ui-container').style.display = 'none';
-        const view = document.getElementById('album-view');
-        view.style.display = 'flex';
-        const albumEl = document.getElementById('my-album');
-
-        let html = `<div class="page" data-density="hard"><div style="text-align:center; padding:20px;"><h2>𓃥 白六相簿</h2><p>${msg}</p></div></div>`;
-        imgs.forEach(url => {
-            html += `<div class="page"><a href="${url}=d" target="_blank"><img src="${url}=w1000"></a></div>`;
-        });
-        albumEl.innerHTML = html + `<div class="page" data-density="hard"><h3>THE END</h3></div>`;
-
-        const pageFlip = new St.PageFlip(albumEl, { width: 400, height: 600, size: "stretch", showCover: true });
-        pageFlip.loadFromHTML(document.querySelectorAll(".page"));
-
-        new PhotoSwipeLightbox({ gallery: '#my-album', children: 'a', pswpModule: () => import('https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe.esm.min.js') }).init();
-    }
-
-    init();
-</script>
-</body>
-</html>
+        const shareUrl = `https://
