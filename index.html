@@ -3,104 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>𓃥 白六分享相簿 APP</title>
+    <title>𓃥 白六分享相簿</title>
     <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe.min.css">
-    
     <style>
         :root { --primary: #00b900; --bg: #121212; --card: #222222; }
-        body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; overflow-x: hidden; }
-        .container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; box-sizing: border-box; }
-        #setup-ui { width: 100%; max-width: 400px; background: var(--card); padding: 30px; border-radius: 20px; text-align: center; }
-        .logo { font-size: 50px; margin-bottom: 10px; }
-        .preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; max-height: 200px; overflow-y: auto; }
-        .preview-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid #444; }
-        .btn { width: 100%; padding: 14px; border-radius: 30px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        body { background: var(--bg); color: #fff; font-family: sans-serif; margin: 0; text-align: center; }
+        .container { padding: 20px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #setup-ui { width: 100%; max-width: 350px; background: var(--card); padding: 25px; border-radius: 20px; }
+        .preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 15px 0; }
+        .preview-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 5px; }
+        .btn { width: 100%; padding: 12px; border-radius: 25px; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .btn-upload { background: #444; color: #fff; }
         .btn-share { background: var(--primary); color: #fff; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        input[type="text"] { width: 100%; padding: 14px; border-radius: 30px; border: 1px solid #444; background: #000; color: #fff; margin-top: 10px; box-sizing: border-box; }
+        input { width: 100%; padding: 12px; border-radius: 20px; border: 1px solid #444; background: #000; color: #fff; margin-top: 10px; box-sizing: border-box; }
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; }
-        .page { background: #fff; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px solid #ddd; }
-        .page img { width: 90%; height: 85%; object-fit: contain; }
+        .page { background: #fff; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; }
+        .page img { max-width: 90%; max-height: 90%; }
     </style>
 </head>
 <body>
 
 <div id="setup-ui-container" class="container">
     <div id="setup-ui">
-        <div class="logo">𓃥</div>
-        <h2 style="margin:0;">白六分享相簿</h2>
-        <p style="color:#888; font-size:14px;">手動選取照片，製作翻頁相簿</p>
+        <div style="font-size: 40px;">𓃥</div>
+        <h2>白六分享相簿</h2>
+        <p style="color:#888; font-size:12px;">建議選取 3-5 張照片以確保發送成功</p>
         
         <input type="file" id="file-input" multiple accept="image/*" style="display:none;">
         <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">+ 選取照片</button>
-        
         <div id="preview-grid" class="preview-grid"></div>
         
-        <input type="text" id="user-msg" placeholder="想對朋友說的話...">
-        <button id="share-btn" class="btn btn-share" disabled onclick="sendFlexMessage()">分享這本相簿</button>
+        <input type="text" id="user-msg" placeholder="輸入想說的話...">
+        <button id="share-btn" class="btn btn-share" disabled onclick="sendFlexMessage()">分享給好友</button>
     </div>
 </div>
 
-<div id="album-view">
-    <div id="my-album"></div>
-</div>
+<div id="album-view"><div id="my-album"></div></div>
 
-<script type="module">
-    import PhotoSwipeLightbox from 'https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe-lightbox.esm.min.js';
-
+<script>
     const LIFF_ID = '2009222789-M8aFcFM7';
-    let base64Photos = [];
+    let compressedPhotos = [];
 
     async function init() {
-        try {
-            await liff.init({ liffId: LIFF_ID });
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('imgs')) {
-                // 如果是接收者，解析縮址或外部圖片 URL
-                renderBook(decodeURIComponent(params.get('imgs')).split(','), decodeURIComponent(params.get('msg') || ""));
-            }
-        } catch (e) { console.error("LIFF Init Error", e); }
+        await liff.init({ liffId: LIFF_ID });
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('imgs')) renderBook(JSON.parse(decodeURIComponent(params.get('imgs'))), decodeURIComponent(params.get('msg') || ""));
     }
 
-    // 處理照片選取與預覽
     document.getElementById('file-input').addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         const previewGrid = document.getElementById('preview-grid');
         previewGrid.innerHTML = '';
-        base64Photos = [];
+        compressedPhotos = [];
 
         for (const file of files) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = document.createElement('img');
-                img.src = event.target.result;
-                previewGrid.appendChild(img);
-                // 注意：這裡直接傳 base64 在 LINE URL 會過長，實際建議上傳至免費圖床或僅限少量照片
-                base64Photos.push(event.target.result); 
-                if (base64Photos.length > 0) document.getElementById('share-btn').disabled = false;
-            };
-            reader.readAsDataURL(file);
+            const base64 = await compressImage(file);
+            compressedPhotos.push(base64);
+            const img = document.createElement('img');
+            img.src = base64;
+            previewGrid.appendChild(img);
         }
+        document.getElementById('share-btn').disabled = compressedPhotos.length === 0;
     });
+
+    function compressImage(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (e) => {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    // 縮小尺寸至 400px
+                    const scale = 400 / Math.max(img.width, img.height);
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.6)); // 壓縮品質 0.6
+                };
+            };
+        });
+    }
 
     window.sendFlexMessage = async function() {
         const msg = document.getElementById('user-msg').value || "送你一本相簿";
-        
-        // 提醒：因為 URL 長度限制，此處示範僅抓取前 3 張圖片網址
-        // 若要穩定使用，建議將圖片上傳至 Imgur 等平台獲取短網址
-        const sampleImgs = base64Photos.slice(0, 5); 
-        const shareUrl = `https://liff.line.me/${LIFF_ID}?imgs=${encodeURIComponent(sampleImgs.join(','))}&msg=${encodeURIComponent(msg)}`;
-        
+        const imgsData = encodeURIComponent(JSON.stringify(compressedPhotos));
+        const shareUrl = `https://liff.line.me/${LIFF_ID}?imgs=${imgsData}&msg=${encodeURIComponent(msg)}`;
+
+        if (shareUrl.length > 30000) {
+            alert("照片太多或太大，請減少至 3 張再試一次！");
+            return;
+        }
+
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
                 "type": "flex", "altText": "𓃥 白六分享相簿",
                 "contents": {
                     "type": "bubble",
                     "hero": { "type": "image", "url": "https://img.icons8.com/color/144/album.png", "size": "xl", "aspectMode": "fit" },
-                    "body": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "𓃥 白六分享相簿", "weight": "bold", "color": "#00b900" }, { "type": "text", "text": msg, "size": "sm" }] },
+                    "body": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "𓃥 白六送來了相簿", "weight": "bold", "color": "#00b900" }, { "type": "text", "text": msg, "size": "sm" }] },
                     "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "style": "primary", "color": "#00b900", "action": { "type": "uri", "label": "點我翻閱", "uri": shareUrl } }] }
                 }
             }]);
@@ -110,16 +114,12 @@
 
     function renderBook(imgs, msg) {
         document.getElementById('setup-ui-container').style.display = 'none';
-        const view = document.getElementById('album-view');
-        view.style.display = 'flex';
+        document.getElementById('album-view').style.display = 'flex';
         const albumEl = document.getElementById('my-album');
-        
-        let html = `<div class="page" data-density="hard"><h2>𓃥 白六相簿</h2><p>${msg}</p></div>`;
-        imgs.forEach(url => { html += `<div class="page"><img src="${url}"></div>`; });
-        albumEl.innerHTML = html + `<div class="page" data-density="hard"><h3>THE END</h3></div>`;
-        
-        const pageFlip = new St.PageFlip(albumEl, { width: 400, height: 600, size: "stretch", showCover: true });
-        pageFlip.loadFromHTML(document.querySelectorAll(".page"));
+        let html = `<div class="page"><div><h2>𓃥 白六相簿</h2><p>${msg}</p></div></div>`;
+        imgs.forEach(src => { html += `<div class="page"><img src="${src}"></div>`; });
+        albumEl.innerHTML = html + `<div class="page"><h3>THE END</h3></div>`;
+        new St.PageFlip(albumEl, { width: 300, height: 450, size: "stretch", showCover: true }).loadFromHTML(document.querySelectorAll(".page"));
     }
 
     init();
