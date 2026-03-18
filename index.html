@@ -79,22 +79,20 @@
     }
 
     // 重點一：強制跳轉授權頁面
-    window.handleGoogleAuth = function() {
-        const redirectUri = window.location.origin + window.location.pathname;
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-            `client_id=${CONFIG.CLIENT_ID}&` +
-            `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-            `response_type=token&` +
-            `scope=${encodeURIComponent(CONFIG.SCOPE)}&` +
-            `prompt=consent`;
+window.handleGoogleAuth = function() {
+    // 強制指定一個與後台登記完全相同的網址
+    const redirectUri = 'https://kuochili-ops.github.io/'; 
+    
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${CONFIG.CLIENT_ID}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+        `response_type=token&` +
+        `scope=${encodeURIComponent(CONFIG.SCOPE)}&` +
+        `prompt=consent`;
 
-        // 存儲目前的訊息，避免跳轉回來後消失
-        sessionStorage.setItem('temp_msg', document.getElementById('user-msg').value);
-        
-        // 直接跳轉
-        window.location.href = authUrl;
-    };
-
+    sessionStorage.setItem('temp_msg', document.getElementById('user-msg').value);
+    window.location.href = authUrl;
+};
     // 重點二：從 URL 碎片中提取 Token
     function checkUrlToken() {
         const hash = window.location.hash;
