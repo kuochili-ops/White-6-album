@@ -39,7 +39,7 @@
         </div>
         <div id="selector-box" class="hidden">
             <p style="font-size:14px; color:var(--primary);">連線成功！</p>
-            <div id="album-list" class="album-list">載入相簿中...</div>
+            <div id="album-list" class="album-list">正在搜尋您的相簿...</div>
             <input type="text" id="user-msg" placeholder="想對朋友說的話...">
             <button id="share-btn" disabled onclick="sendFlexMessage()">分享這本相簿</button>
         </div>
@@ -57,7 +57,7 @@
         CLIENT_ID: '926483239392-mbn8nv60mgh6kk4s5joaemnhao5kv46p.apps.googleusercontent.com',
         LIFF_ID: '2009222789-M8aFcFM7',
         SCOPE: 'https://www.googleapis.com/auth/photoslibrary.readonly',
-        // 【關鍵修正】：路徑必須包含 White-6-album
+        // 確保此網址與您的 GitHub 部署路徑一致
         REDIRECT_URI: 'https://kuochili-ops.github.io/White-6-album/' 
     };
 
@@ -85,16 +85,13 @@
     };
 
     function checkUrlToken() {
-        // 從網址 hash 抓取 Token
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
             const params = new URLSearchParams(hash.replace('#', ''));
             googleToken = params.get('access_token');
-            
             if (googleToken) {
                 document.getElementById('auth-box').classList.add('hidden');
                 document.getElementById('selector-box').classList.remove('hidden');
-                // 清理網址，避免重複載入
                 window.history.replaceState(null, null, window.location.pathname);
                 loadAlbums();
             }
@@ -108,13 +105,10 @@
                 headers: { 'Authorization': `Bearer ${googleToken}` }
             });
             const data = await res.json();
-            
             if (data.error) {
-                // 如果權限不夠，會在這裡噴紅字
                 listEl.innerHTML = `<p style="color:red; font-size:12px;">權限錯誤: ${data.error.message}</p>`;
                 return;
             }
-
             listEl.innerHTML = '';
             if (data.albums) {
                 data.albums.forEach(album => {
@@ -140,10 +134,41 @@
         selectedPhotos = data.mediaItems ? data.mediaItems.map(item => item.baseUrl) : [];
         if (selectedPhotos.length > 0) {
             document.getElementById('share-btn').disabled = false;
-            alert(`已成功抓取 ${selectedPhotos.length} 張相片！`);
+            alert(`已選取 ${selectedPhotos.length} 張相片！`);
         }
     }
 
     window.sendFlexMessage = async function() {
         const msg = document.getElementById('user-msg').value || "送你一本相簿";
-        const shareUrl = `https://
+        const shareUrl = `https://liff.line.me/${CONFIG.LIFF_ID}?imgs=${encodeURIComponent(selectedPhotos.join(','))}&msg=${encodeURIComponent(msg)}`;
+        if (liff.isApiAvailable('shareTargetPicker')) {
+            await liff.shareTargetPicker([{
+                "type": "flex", "altText": "𓃥 白六分享相簿",
+                "contents": {
+                    "type": "bubble",
+                    "hero": { "type": "image", "url": selectedPhotos[0], "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                    "body": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "𓃥 白六分享相簿", "weight": "bold", "color": "#00b900" }, { "type": "text", "text": msg, "size": "sm" }] },
+                    "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "style": "primary", "color": "#00b900", "action": { "type": "uri", "label": "點我翻閱", "uri": shareUrl } }] }
+                }
+            }]);
+            liff.closeWindow();
+        }
+    };
+
+    function renderBook(imgs, msg) {
+        document.getElementById('setup-ui-container').style.display = 'none';
+        const view = document.getElementById('album-view');
+        view.style.display = 'flex';
+        const albumEl = document.getElementById('my-album');
+        let html = `<div class="page" data-density="hard"><div style="text-align:center; padding:20px;"><h2>𓃥 白六相簿</h2><p>${msg}</p></div></div>`;
+        imgs.forEach(url => { html += `<div class="page"><a href="${url}=d" target="_blank"><img src="${url}=w1000"></a></div>`; });
+        albumEl.innerHTML = html + `<div class="page" data-density="hard"><h3>THE END</h3></div>`;
+        const pageFlip = new St.PageFlip(albumEl, { width: 400, height: 600, size: "stretch", showCover: true });
+        pageFlip.loadFromHTML(document.querySelectorAll(".page"));
+        new PhotoSwipeLightbox({ gallery: '#my-album', children: 'a', pswpModule: () => import('https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.2/photoswipe.esm.min.js') }).init();
+    }
+
+    init();
+</script>
+</body>
+</html>
