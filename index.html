@@ -36,7 +36,7 @@
         <h2 style="margin:0 0 10px 0;">白六分享相簿</h2>
         
         <div id="auth-box">
-            <p style="color:#aaa; font-size:14px;">點擊以重新授權並讀取相簿</p>
+            <p style="color:#aaa; font-size:14px;">點擊以完成 Google 相簿授權</p>
             <button onclick="handleGoogleAuth()">登入 Google 帳號</button>
         </div>
 
@@ -69,7 +69,7 @@
         try {
             await liff.init({ liffId: CONFIG.LIFF_ID });
             
-            // 檢查網址是否有 OAuth 回傳的 Token
+            // 檢查 URL Hash 中是否帶有 Access Token
             checkUrlToken();
 
             const params = new URLSearchParams(window.location.search);
@@ -78,37 +78,33 @@
         } catch (e) { console.error(e); }
     }
 
-    // 重點一：強制跳轉授權頁面
-window.handleGoogleAuth = function() {
-    // 強制指定一個與後台登記完全相同的網址
-    const redirectUri = 'https://kuochili-ops.github.io/'; 
-    
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${CONFIG.CLIENT_ID}&` +
-        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `response_type=token&` +
-        `scope=${encodeURIComponent(CONFIG.SCOPE)}&` +
-        `prompt=consent`;
+    // 修正點：統一 redirectUri 並加入 prompt=consent 強制彈出勾選視窗
+    window.handleGoogleAuth = function() {
+        const redirectUri = 'https://kuochili-ops.github.io/'; 
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+            `client_id=${CONFIG.CLIENT_ID}&` +
+            `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+            `response_type=token&` +
+            `scope=${encodeURIComponent(CONFIG.SCOPE)}&` +
+            `prompt=consent`;
 
-    sessionStorage.setItem('temp_msg', document.getElementById('user-msg').value);
-    window.location.href = authUrl;
-};
-    // 重點二：從 URL 碎片中提取 Token
+        sessionStorage.setItem('temp_msg', document.getElementById('user-msg').value);
+        window.location.href = authUrl;
+    };
+
     function checkUrlToken() {
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
             const params = new URLSearchParams(hash.replace('#', ''));
             googleToken = params.get('access_token');
             
-            // 恢復訊息
             const savedMsg = sessionStorage.getItem('temp_msg');
             if (savedMsg) document.getElementById('user-msg').value = savedMsg;
 
-            // 進入相簿選擇畫面
             document.getElementById('auth-box').classList.add('hidden');
             document.getElementById('selector-box').classList.remove('hidden');
             
-            // 清除網址上的雜訊
+            // 清理網址雜訊
             window.history.replaceState(null, null, window.location.pathname);
             
             loadAlbums();
@@ -124,8 +120,8 @@ window.handleGoogleAuth = function() {
             const data = await res.json();
 
             if (data.error) {
-                alert("Google 權限拒絕：" + data.error.message);
-                listEl.innerHTML = `<p style="color:red; font-size:12px;">錯誤: ${data.error.message}</p>`;
+                alert("Google 授權錯誤：" + data.error.message);
+                listEl.innerHTML = `<p style="color:red; font-size:12px;">權限不足: ${data.error.message}</p>`;
                 return;
             }
 
@@ -139,9 +135,9 @@ window.handleGoogleAuth = function() {
                     listEl.appendChild(div);
                 });
             } else {
-                listEl.innerHTML = '<p style="padding:10px;">找不到相簿！請在 Google 相簿建立至少一個相簿資料夾。</p>';
+                listEl.innerHTML = '<p style="padding:10px;">找不到相簿！請確認 Google 相簿中已有建立好的相簿資料夾。</p>';
             }
-        } catch (e) { listEl.innerHTML = '連線異常'; }
+        } catch (e) { listEl.innerHTML = '網路連線異常'; }
     }
 
     async function selectAlbum(id) {
@@ -154,7 +150,7 @@ window.handleGoogleAuth = function() {
         selectedPhotos = data.mediaItems ? data.mediaItems.map(item => item.baseUrl) : [];
         if (selectedPhotos.length > 0) {
             document.getElementById('share-btn').disabled = false;
-            alert(`已選取 ${selectedPhotos.length} 張相片，可以分享囉！`);
+            alert(`成功讀取 ${selectedPhotos.length} 張照片！`);
         }
     }
 
