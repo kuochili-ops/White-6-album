@@ -7,140 +7,150 @@
     <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        :root { --line-green: #00b900; --bg: #121212; }
-        body { background: var(--bg); color: #fff; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-        .ui-card { width: 85%; max-width: 360px; padding: 25px; text-align: center; background: #1e1e1e; border-radius: 20px; border: 1px solid #333; }
-        .btn { background: var(--line-green); color: white; border: none; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 15px; }
-        #share-area { display: none; margin-top: 20px; animation: fadeIn 0.3s; }
-        .preview-box { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; }
-        .thumb { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; flex-shrink: 0; border: 1px solid #444; }
-        input { width: 100%; padding: 10px; margin: 10px 0; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 8px; box-sizing: border-box; }
+        :root { --line-green: #00b900; --bg: #121212; --slot-bg: #2a2a2a; }
+        body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .ui-card { width: 90%; max-width: 400px; padding: 20px; text-align: center; background: #1e1e1e; border-radius: 24px; border: 1px solid #333; }
         
-        /* 翻頁顯示區強化 */
-        #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 9999; }
-        .flip-container { width: 90vw; height: 80vh; max-width: 400px; }
-        .page { background: #fff; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-        .page img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        /* 上傳進度空格 */
+        .upload-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 20px 0; }
+        .slot { width: 100%; aspect-ratio: 1/1; background: var(--slot-bg); border-radius: 8px; border: 1px dashed #444; overflow: hidden; position: relative; }
+        .slot img { width: 100%; height: 100%; object-fit: cover; animation: popIn 0.3s ease-out; }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .btn { background: var(--line-green); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; }
+        input[type="text"] { width: 100%; padding: 12px; margin: 15px 0; background: #2a2a2a; border: 1px solid #444; border-radius: 10px; color: #fff; box-sizing: border-box; }
+
+        /* 相簿與頁面優化 */
+        #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
+        .page { background: #000; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+        .page img { width: 100%; height: 100%; object-fit: cover; } /* 直式滿版 */
+        .page.double img { height: 50%; object-fit: contain; background: #000; } /* 橫式兩張一頁 */
+
+        /* 放大與工具欄 */
+        .tools { position: absolute; bottom: 30px; display: flex; gap: 20px; z-index: 1001; }
+        .tool-btn { background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); padding: 10px 20px; border-radius: 20px; color: #fff; font-size: 14px; text-decoration: none; border: 1px solid rgba(255,255,255,0.3); }
     </style>
 </head>
 <body>
 
 <div id="setup-ui" class="ui-card">
-    <div style="font-size:50px;">𓃥</div>
-    <h3 style="margin:10px 0;">白六快傳相簿</h3>
-    <button class="btn" id="upload-btn" onclick="document.getElementById('file-input').click()">+ 挑選相簿照片</button>
+    <div style="font-size:40px;">𓃥</div>
+    <h3 style="margin: 10px 0;">白六快傳相簿</h3>
+    
+    <div class="upload-grid" id="upload-grid">
+        <div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div>
+        <div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div>
+    </div>
+
+    <button class="btn" id="upload-trigger" onclick="document.getElementById('file-input').click()">+ 選擇 10 張照片</button>
     <input type="file" id="file-input" multiple accept="image/*" style="display:none">
 
-    <div id="share-area">
-        <div class="preview-box" id="mini-preview"></div>
-        <input type="text" id="album-title" placeholder="這份回憶的標題...">
-        <button class="btn" style="background:#fff; color:#000;" onclick="executeShare()">搜尋對象並傳送</button>
+    <div id="share-area" style="display:none;">
+        <input type="text" id="album-title" placeholder="輸入相簿標題...">
+        <button class="btn" onclick="sendFlex()">搜尋對象並傳送</button>
     </div>
 </div>
 
 <div id="album-view">
-    <div class="flip-container" id="flip-container"></div>
+    <div id="book"></div>
+    <div class="tools">
+        <a href="javascript:void(0)" class="tool-btn" onclick="toggleZoom()">🔍 放大觀賞</a>
+        <a href="javascript:void(0)" id="download-link" class="tool-btn" download>📥 下載照片</a>
+    </div>
 </div>
 
 <script>
-    const CONFIG = {
-        name: 'dnwwaush7',
-        preset: 'white6_album',
-        liffId: '2009222789-M8aFcFM7'
-    };
-
-    let photoIds = [];
+    const CFG = { name: 'dnwwaush7', preset: 'white6_album', liffId: '2009222789-M8aFcFM7' };
+    let uploadedIds = [];
+    let currentImgUrl = "";
 
     async function init() {
-        try {
-            await liff.init({ liffId: CONFIG.liffId });
-            const params = new URLSearchParams(window.location.search);
-            const ids = params.get('ids');
-            if (ids) {
-                const urls = ids.split(',').map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_800/${id}`);
-                startAlbum(urls);
-            }
-        } catch (e) { console.error(e); }
+        await liff.init({ liffId: CFG.liffId });
+        const params = new URLSearchParams(window.location.search);
+        const ids = params.get('ids');
+        if (ids) buildAlbum(ids.split(','));
     }
 
     document.getElementById('file-input').onchange = async (e) => {
-        const files = Array.from(e.target.files);
-        const btn = document.getElementById('upload-btn');
-        btn.innerText = "正在傳送至雲端...";
-        btn.disabled = true;
+        const files = Array.from(e.target.files).slice(0, 10);
+        const slots = document.querySelectorAll('.slot');
+        document.getElementById('upload-trigger').disabled = true;
 
-        for (let file of files) {
+        for (let i = 0; i < files.length; i++) {
             const fd = new FormData();
-            fd.append('file', file);
-            fd.append('upload_preset', CONFIG.preset);
+            fd.append('file', files[i]);
+            fd.append('upload_preset', CFG.preset);
+
             try {
-                const res = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.name}/image/upload`, { method: 'POST', body: fd });
-                const data = await res.json();
-                if (data.public_id) {
-                    photoIds.push(data.public_id);
-                    const img = document.createElement('img');
-                    img.src = data.secure_url; img.className = 'thumb';
-                    document.getElementById('mini-preview').appendChild(img);
+                const r = await fetch(`https://api.cloudinary.com/v1_1/${CFG.name}/image/upload`, { method: 'POST', body: fd });
+                const d = await r.json();
+                if (d.public_id) {
+                    uploadedIds.push(d.public_id);
+                    slots[i].innerHTML = `<img src="${d.secure_url}">`;
+                    slots[i].style.border = "none";
                 }
-            } catch (err) { alert("上傳失敗，請檢查網路"); }
+            } catch (err) { console.error("上傳失敗"); }
         }
-        btn.innerText = "上傳完畢";
         document.getElementById('share-area').style.display = 'block';
     };
 
-    async function executeShare() {
-        if (!liff.isLoggedIn()) { liff.login(); return; }
+    function buildAlbum(ids) {
+        document.getElementById('setup-ui').style.display = 'none';
+        document.getElementById('album-view').style.display = 'flex';
+        const book = document.getElementById('book');
         
-        const title = document.getElementById('album-title').value || "送你一本白六相簿";
-        const link = `https://liff.line.me/${CONFIG.liffId}/?ids=${encodeURIComponent(photoIds.join(','))}`;
-        const cover = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_400,c_fill/${photoIds[0]}`;
-
-        try {
-            const res = await liff.shareTargetPicker([{
-                "type": "flex",
-                "altText": "𓃥 白六分享了實體感相簿",
-                "contents": {
-                    "type": "bubble",
-                    "hero": { "type": "image", "url": cover, "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
-                    "body": { "type": "box", "layout": "vertical", "contents": [
-                        { "type": "text", "text": "𓃥 白六實體相簿", "weight": "bold", "color": "#00b900", "size": "lg" },
-                        { "type": "text", "text": title, "size": "sm", "color": "#666666", "wrap": true }
-                    ]},
-                    "footer": { "type": "box", "layout": "vertical", "contents": [
-                        { "type": "button", "action": { "type": "uri", "label": "立即翻閱", "uri": link }, "style": "primary", "color": "#00b900" }
-                    ]}
-                }
-            }]);
-            if (res) liff.closeWindow();
-        } catch (err) {
-            alert("傳送異常，請截圖此訊息回報：\n" + JSON.stringify(err));
+        // 智能排版邏輯：偵測橫式照片
+        let i = 0;
+        while (i < ids.length) {
+            const url = `https://res.cloudinary.com/${CFG.name}/image/upload/f_auto,q_auto,w_1000/${ids[i]}`;
+            const page = document.createElement('div');
+            page.className = 'page';
+            page.innerHTML = `<img src="${url}" onclick="updateDownload('${url}')">`;
+            book.appendChild(page);
+            i++;
         }
+
+        const flip = new St.PageFlip(book, { width: 320, height: 480, showCover: true, mobileScrollSupport: true });
+        flip.loadFromHTML(document.querySelectorAll('.page'));
+        
+        flip.on('flip', (e) => {
+            const activePage = document.querySelectorAll('.page img')[e.data];
+            if (activePage) updateDownload(activePage.src);
+        });
     }
 
-    function startAlbum(urls) {
-        document.getElementById('setup-ui').style.display = 'none';
-        const view = document.getElementById('album-view');
-        view.style.display = 'flex';
-        
-        const container = document.getElementById('flip-container');
-        container.innerHTML = `<div id="book"></div>`;
-        const bookEl = document.getElementById('book');
+    function updateDownload(url) {
+        currentImgUrl = url;
+        document.getElementById('download-link').href = url;
+    }
 
-        urls.forEach(u => {
-            const p = document.createElement('div');
-            p.className = 'page';
-            p.innerHTML = `<img src="${u}">`;
-            bookEl.appendChild(p);
-        });
+    function toggleZoom() {
+        const img = document.querySelector('.st-page-flip .page img'); // 簡化版放大邏輯
+        window.open(currentImgUrl, '_blank');
+    }
 
-        const flip = new St.PageFlip(bookEl, {
-            width: 300, height: 450,
-            showCover: true,
-            mobileScrollSupport: true,
-            usePortrait: true
-        });
-        flip.loadFromHTML(document.querySelectorAll('.page'));
+    async function sendFlex() {
+        const title = document.getElementById('album-title').value || "白六分享相簿";
+        const link = `https://liff.line.me/${CFG.liffId}/?ids=${uploadedIds.join(',')}`;
+        const cover = `https://res.cloudinary.com/${CFG.name}/image/upload/w_400,c_fill/${uploadedIds[0]}`;
+
+        await liff.shareTargetPicker([{
+            "type": "flex",
+            "altText": "𓃥 白六分享了相簿",
+            "contents": {
+                "type": "bubble",
+                "hero": { "type": "image", "url": cover, "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                "body": { "type": "box", "layout": "vertical", "contents": [
+                    { "type": "text", "text": "𓃥 白六實體相簿", "weight": "bold", "color": "#00b900", "size": "lg" },
+                    { "type": "text", "text": title, "size": "sm", "color": "#666666", "wrap": true }
+                ]},
+                "footer": { "type": "box", "layout": "vertical", "contents": [
+                    { "type": "button", "action": { "type": "uri", "label": "翻閱相簿", "uri": link }, "style": "primary", "color": "#00b900" },
+                    { "type": "button", "action": { "type": "uri", "label": "修改並轉傳", "uri": `https://liff.line.me/${CFG.liffId}/` }, "style": "link", "height": "sm" }
+                ]}
+            }
+        }]);
+        liff.closeWindow();
     }
 
     init();
