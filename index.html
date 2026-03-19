@@ -8,21 +8,15 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         :root { --line-green: #00b900; --dark-bg: #121212; --card-bg: #1e1e1e; }
-        body { background: var(--dark-bg); color: #fff; font-family: -apple-system, system-ui, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        body { background: var(--dark-bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
         .ui-card { width: 85%; max-width: 380px; padding: 30px 20px; text-align: center; background: var(--card-bg); border-radius: 28px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); border: 1px solid #333; }
         .logo { font-size: 60px; margin-bottom: 5px; }
-        .btn { background: var(--line-green); color: white; border: none; padding: 15px; border-radius: 14px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.2s; margin-top: 10px; }
+        .btn { background: var(--line-green); color: white; border: none; padding: 15px; border-radius: 14px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
         .btn:disabled { background: #444; opacity: 0.7; }
         #share-area { display: none; margin-top: 25px; border-top: 1px solid #333; padding-top: 20px; text-align: left; }
         input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #2a2a2a; color: #fff; margin: 8px 0 15px 0; box-sizing: border-box; }
-        label { font-size: 12px; color: #888; margin-left: 2px; }
-        
-        /* 縮圖預覽區 */
-        .preview-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 5px 0 15px 0; scrollbar-width: none; }
-        .preview-scroll::-webkit-scrollbar { display: none; }
-        .thumb { width: 65px; height: 65px; border-radius: 8px; object-fit: cover; flex-shrink: 0; border: 1px solid #444; background: #333; }
-
-        /* 相簿全螢幕 */
+        .preview-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 5px 0 15px 0; }
+        .thumb { width: 65px; height: 65px; border-radius: 8px; object-fit: cover; flex-shrink: 0; border: 1px solid #444; }
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; align-items: center; justify-content: center; }
         .page { background: #fff; display: flex; align-items: center; justify-content: center; }
         .page img { max-width: 98%; max-height: 98%; object-fit: contain; }
@@ -33,7 +27,7 @@
 <div id="setup-ui" class="ui-card">
     <div class="logo">𓃥</div>
     <h3 style="margin:0;">白六快傳相簿</h3>
-    <p style="color:#666; font-size:13px; margin: 5px 0 25px 0;">穩定、快速、實體感</p>
+    <p style="color:#666; font-size:13px; margin: 5px 0 25px 0;">穩定、快速、傳送優化</p>
     
     <button class="btn" id="upload-btn" onclick="document.getElementById('file-selector').click()">
         + 挑選相簿照片
@@ -41,12 +35,8 @@
     <input type="file" id="file-selector" multiple accept="image/*" style="display:none">
 
     <div id="share-area">
-        <label>照片預覽</label>
         <div class="preview-scroll" id="mini-preview"></div>
-
-        <label>相簿標題</label>
-        <input type="text" id="album-msg" placeholder="這份回憶叫什麼名字？">
-        
+        <input type="text" id="album-msg" placeholder="相簿標題 (例如：今日聚餐)">
         <button class="btn" style="background:#fff; color:#000;" onclick="shareToLine()">
             🔍 搜尋對象並傳送
         </button>
@@ -69,12 +59,21 @@
     async function init() {
         await liff.init({ liffId: CFG.liffId });
         const params = new URLSearchParams(window.location.search);
-        if (params.get('imgs')) {
-            renderBook(decodeURIComponent(params.get('imgs')).split(','));
+        
+        // 優先讀取短 ID 模式，相容舊版 imgs 模式
+        const ids = params.get('ids');
+        const imgs = params.get('imgs');
+        
+        if (ids) {
+            const fullUrls = decodeURIComponent(ids).split(',').map(id => 
+                `https://res.cloudinary.com/${CFG.name}/image/upload/w_1000,f_auto,q_auto/${id}`
+            );
+            renderBook(fullUrls);
+        } else if (imgs) {
+            renderBook(decodeURIComponent(imgs).split(','));
         }
     }
 
-    // 前端壓縮：將大圖縮小提升上傳成功率
     function compress(file) {
         return new Promise(res => {
             const reader = new FileReader();
@@ -101,9 +100,8 @@
 
         const btn = document.getElementById('upload-btn');
         btn.disabled = true;
-        btn.innerText = "加速優化上傳中...";
+        btn.innerText = "優化中...";
 
-        // 併發上傳邏輯
         const tasks = files.map(async file => {
             try {
                 const readyFile = await compress(file);
@@ -117,44 +115,52 @@
                 const d = await r.json();
                 
                 if (d.secure_url) {
-                    const url = d.secure_url.replace('/upload/', '/upload/w_1000,f_auto,q_auto/');
-                    // 即時渲染縮圖
                     const img = document.createElement('img');
-                    img.src = url; img.className = 'thumb';
+                    img.src = d.secure_url; img.className = 'thumb';
                     document.getElementById('mini-preview').appendChild(img);
-                    return url;
+                    return d.secure_url;
                 }
             } catch (err) { return null; }
         });
 
         const results = await Promise.all(tasks);
         uploadedUrls = results.filter(u => u !== null);
-        
-        btn.innerText = `成功處理 ${uploadedUrls.length} 張照片`;
+        btn.innerText = `已成功優化 ${uploadedUrls.length} 張`;
         document.getElementById('share-area').style.display = 'block';
     };
 
     async function shareToLine() {
         if (!liff.isLoggedIn()) { liff.login(); return; }
-        const title = document.getElementById('album-msg').value || "送你一本實體感相簿";
-        const link = `https://liff.line.me/${CFG.liffId}/?imgs=${encodeURIComponent(uploadedUrls.join(','))}`;
+        
+        // 核心改動：只提取 ID 以縮短 URL 避免對方收不到
+        const shortIds = uploadedUrls.map(url => {
+            const parts = url.split('/');
+            return parts[parts.length - 1]; 
+        });
+
+        const title = document.getElementById('album-msg').value || "白六分享相簿";
+        const link = `https://liff.line.me/${CFG.liffId}/?ids=${encodeURIComponent(shortIds.join(','))}`;
 
         if (liff.isApiAvailable('shareTargetPicker')) {
-            await liff.shareTargetPicker([{
-                "type": "flex", "altText": "𓃥 白六分享了相簿",
-                "contents": {
-                    "type": "bubble",
-                    "hero": { "type": "image", "url": uploadedUrls[0], "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
-                    "body": { "type": "box", "layout": "vertical", "contents": [
-                        { "type": "text", "text": "𓃥 白六實體相簿", "weight": "bold", "size": "xl", "color": "#00b900" },
-                        { "type": "text", "text": title, "wrap": true, "margin": "md", "color": "#666" }
-                    ]},
-                    "footer": { "type": "box", "layout": "vertical", "contents": [
-                        { "type": "button", "action": { "type": "uri", "label": "打開相簿", "uri": link }, "style": "primary", "color": "#00b900" }
-                    ]}
-                }
-            }]);
-            liff.closeWindow();
+            try {
+                const result = await liff.shareTargetPicker([{
+                    "type": "flex", "altText": "𓃥 白六分享了相簿",
+                    "contents": {
+                        "type": "bubble",
+                        "hero": { "type": "image", "url": uploadedUrls[0], "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                        "body": { "type": "box", "layout": "vertical", "contents": [
+                            { "type": "text", "text": "𓃥 白六實體相簿", "weight": "bold", "size": "xl", "color": "#00b900" },
+                            { "type": "text", "text": title, "wrap": true, "margin": "md", "color": "#666" }
+                        ]},
+                        "footer": { "type": "box", "layout": "vertical", "contents": [
+                            { "type": "button", "action": { "type": "uri", "label": "立即翻閱", "uri": link }, "style": "primary", "color": "#00b900" }
+                        ]}
+                    }
+                }]);
+                if (result) { liff.closeWindow(); }
+            } catch (err) {
+                alert("傳送失敗：建議減少照片張數或標題字數");
+            }
         }
     }
 
