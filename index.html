@@ -12,7 +12,7 @@
         
         .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
-        .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; border: 1px dashed #444; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         .slot img { width: 100%; height: 100%; object-fit: cover; }
         
         input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; }
@@ -20,24 +20,28 @@
 
         /* 相簿檢視 */
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
-        .page { background: #111; width: 100%; height: 100%; overflow: hidden; position: relative; }
+        .page { background: #000; width: 100%; height: 100%; overflow: hidden; }
         .page img { width: 100%; height: 100%; object-fit: cover; }
         
-        /* 透明封面 (Page 0) */
+        /* 封面修正：強制透明背景並移除預設黑色 */
         .page.cover-front { 
-            background: rgba(255,255,255,0.1) !important; 
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            background: rgba(40, 40, 40, 0.4) !important; /* 調低底色確保透明 */
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
             display: flex; align-items: center; justify-content: center;
+            z-index: 10;
         }
-        .page.cover-front h2 { font-size: 32px; color: #fff; text-shadow: 0 4px 15px rgba(0,0,0,0.8); margin: 0; padding: 20px; text-align: center; }
+        .page.cover-front h2 { font-size: 32px; color: #fff; text-shadow: 0 4px 15px rgba(0,0,0,1); margin: 0; padding: 20px; text-align: center; font-weight: bold; }
 
-        /* 封底 LOGO */
-        .page.cover-back { background: #3e2f22 !important; display: flex; align-items: flex-end; justify-content: flex-end; padding: 20px; }
-        .page.cover-back .logo-img { width: 120px; height: auto; object-fit: contain; }
+        /* 封底 LOGO 修正：底色透明，LOGO 加大 */
+        .page.cover-back { 
+            background: transparent !important; 
+            display: flex; align-items: flex-end; justify-content: flex-end; padding: 15px;
+        }
+        .page.cover-back .logo-img { width: 160px; height: auto; object-fit: contain; background: transparent; }
 
-        #page-num { position: fixed; bottom: 90px; color: rgba(255,255,255,0.5); font-size: 13px; z-index: 1001; }
-        .tools { position: fixed; bottom: 30px; display: flex; gap: 12px; z-index: 1001; transition: opacity 0.3s; }
-        .tool-btn { background: rgba(255,255,255,0.15); backdrop-filter: blur(12px); padding: 12px 22px; border-radius: 25px; color: #fff; font-size: 14px; text-decoration: none; border: 1px solid rgba(255,255,255,0.2); font-weight: 600; }
+        #page-num { position: fixed; bottom: 90px; color: rgba(255,255,255,0.7); font-size: 14px; z-index: 1001; font-weight: bold; }
+        .tools { position: fixed; bottom: 30px; display: flex; gap: 12px; z-index: 1001; }
+        .tool-btn { background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); padding: 12px 22px; border-radius: 25px; color: #fff; font-size: 14px; text-decoration: none; border: 1px solid rgba(255,255,255,0.2); }
     </style>
 </head>
 <body>
@@ -46,7 +50,7 @@
     <div style="font-size:40px;">𓃥</div>
     <h3 id="ui-title">製作新相簿</h3>
     <div class="grid" id="grid"></div>
-    <button class="btn" id="up-btn" onclick="document.getElementById('file-input').click()">+ 選擇照片 (自動瘦身)</button>
+    <button class="btn" id="up-btn" onclick="document.getElementById('file-input').click()">+ 選擇照片</button>
     <input type="file" id="file-input" multiple accept="image/*" style="display:none">
 
     <div id="info-area" style="display:none; margin-top:15px;">
@@ -59,7 +63,7 @@
 <div id="album-view">
     <div id="book"></div>
     <div id="page-num">封面</div>
-    <div class="tools" id="action-tools" style="opacity:0; pointer-events:none;">
+    <div class="tools" id="action-tools" style="display:none;">
         <a href="javascript:void(0)" class="tool-btn" onclick="openFull()">🔍 放大觀賞</a>
         <a href="javascript:void(0)" class="tool-btn" id="dl-link" download>📥 下載照片</a>
     </div>
@@ -81,7 +85,7 @@
         if (ids && mode !== 'forward') {
             renderBook(ids.split(','), decodeURIComponent(name || "白六相簿"));
         } else if (mode === 'forward') {
-            document.getElementById('ui-title').innerText = "轉傳並修改留言";
+            document.getElementById('ui-title').innerText = "轉傳分享相簿";
             document.getElementById('album-name').value = decodeURIComponent(name || "");
             document.getElementById('album-note').value = decodeURIComponent(note || "");
             uploadedIds = ids.split(',');
@@ -89,39 +93,20 @@
         }
     }
 
-    // 前端壓縮優化
-    async function compressImage(file) {
-        if (file.size < 1024 * 1024) return file;
-        return new Promise(res => {
-            const img = new Image();
-            img.src = URL.createObjectURL(file);
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX = 1200;
-                const scale = MAX / Math.max(img.width, img.height);
-                canvas.width = img.width * (scale < 1 ? scale : 1);
-                canvas.height = img.height * (scale < 1 ? scale : 1);
-                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                canvas.toBlob(blob => res(new File([blob], file.name, {type: "image/jpeg"})), 'image/jpeg', 0.8);
-            };
-        });
-    }
-
     document.getElementById('file-input').onchange = async (e) => {
         const files = Array.from(e.target.files);
         const grid = document.getElementById('grid');
         const btn = document.getElementById('up-btn');
         grid.innerHTML = ""; uploadedIds = [];
-        btn.disabled = true; btn.innerText = "瘦身上傳中...";
+        btn.disabled = true; btn.innerText = "上傳中...";
 
         for (const file of files) {
             const slot = document.createElement('div');
             slot.className = 'slot'; slot.innerHTML = '...';
             grid.appendChild(slot);
             
-            const compressed = await compressImage(file);
             const fd = new FormData();
-            fd.append('file', compressed);
+            fd.append('file', file);
             fd.append('upload_preset', CONFIG.preset);
             
             const r = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.name}/image/upload`, { method: 'POST', body: fd });
@@ -131,7 +116,7 @@
                 slot.innerHTML = `<img src="${d.secure_url}">`;
             }
         }
-        btn.innerText = `已加入 ${uploadedIds.length} 張照片`;
+        btn.innerText = `已完成上傳`;
         document.getElementById('info-area').style.display = 'block';
     };
 
@@ -153,9 +138,10 @@
         const book = document.getElementById('book');
         const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1000/${id}`);
 
-        // Page 0: 透明封面 (放置於第一張圖之上)
+        // Page 0: 透明封面
         const f = document.createElement('div');
         f.className = 'page cover-front';
+        f.setAttribute('data-density', 'hard'); // 關鍵：設定為硬殼
         f.innerHTML = `<h2>${titleText}</h2>`;
         book.appendChild(f);
 
@@ -170,10 +156,18 @@
         // 封底
         const b = document.createElement('div');
         b.className = 'page cover-back';
+        b.setAttribute('data-density', 'hard'); // 關鍵：設定為硬殼
         b.innerHTML = `<img src="IMG_6604 2.png" class="logo-img">`;
         book.appendChild(b);
 
-        const flip = new St.PageFlip(book, { width: 320, height: 480, showCover: true, hardcover: true });
+        const flip = new St.PageFlip(book, { 
+            width: 320, 
+            height: 480, 
+            showCover: true, 
+            flippingTime: 1000,
+            usePortrait: true,
+            startPage: 0
+        });
         flip.loadFromHTML(document.querySelectorAll('.page'));
         
         flip.on('flip', (e) => {
@@ -183,22 +177,24 @@
             
             if (idx === 0) {
                 pageNum.innerText = "封面";
-                tools.style.opacity = "0"; tools.style.pointerEvents = "none";
+                tools.style.display = "none";
             } else if (idx > 0 && idx <= urls.length) {
                 pageNum.innerText = `${idx} / ${urls.length}`;
-                tools.style.opacity = "1"; tools.style.pointerEvents = "auto";
+                tools.style.display = "flex";
                 currentImgUrl = urls[idx - 1];
                 document.getElementById('dl-link').href = currentImgUrl;
             } else {
                 pageNum.innerText = "封底";
-                tools.style.opacity = "0"; tools.style.pointerEvents = "none";
+                tools.style.display = "none";
             }
         });
     }
 
+    function openFull() { window.open(currentImgUrl, '_blank'); }
+
     async function sendToLine() {
-        const name = document.getElementById('album-name').value || "未命名相簿";
-        const note = document.getElementById('album-note').value || "送你一份精彩回憶";
+        const name = document.getElementById('album-name').value || "白六快傳相簿";
+        const note = document.getElementById('album-note').value || "分享一份美好回憶";
         const baseLink = `https://liff.line.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
         const coverUrl = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_500,c_fill/${uploadedIds[0]}`;
 
