@@ -9,7 +9,6 @@
     <style>
         :root { --line-green: #00b900; --bg: #000; --card: #1e1e1e; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
-        
         .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
         .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
@@ -25,7 +24,6 @@
         .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
-        /* 封面玻璃感 */
         .page-cover { 
             background: rgba(255, 255, 255, 0.05) !important; 
             backdrop-filter: blur(25px) brightness(0.7);
@@ -110,18 +108,16 @@
         
         document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
 
-        // 1. 封面 (索引 0)
+        // 1. 封面
         const f = document.createElement('div');
         f.className = 'page page-cover';
-        f.innerHTML = `<h2>${titleText}</h2>`;
         book.appendChild(f);
+        f.innerHTML = `<h2>${titleText}</h2>`;
 
-        // 2. 照片頁 (索引 1, 2, 3...)
+        // 2. 照片頁
         urls.forEach((u, i) => {
             const p = document.createElement('div');
             p.className = 'page photo-page';
-            // 標記物理索引
-            p.setAttribute('data-abs-idx', i + 1); 
             p.innerHTML = `<img src="${u}">`;
             book.appendChild(p);
         });
@@ -132,8 +128,8 @@
         let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
         ids.forEach((id, i) => {
             const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill,f_auto,q_auto/${id}`;
-            // 點擊時直接傳遞目標照片的「物理序號」
-            thumbHtml += `<div class="thumb" onclick="event.stopPropagation(); window.absJump(${i+1})"><img src="${t}"></div>`;
+            // 核心：點擊縮圖，強行關閉動畫並鎖定位置
+            thumbHtml += `<div class="thumb" onclick="event.stopPropagation(); window.superJump(${i+1})"><img src="${t}"></div>`;
         });
         thumbHtml += `<div class="thumb" style="background:#fff;" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
         b.innerHTML = thumbHtml;
@@ -145,8 +141,9 @@
             usePortrait: true,
             drawShadow: false, 
             flippingTime: 400,
-            clickEventForward: true,
-            swipeDistance: 30
+            clickEventForward: false, // 關閉自動點擊轉發，防止引擎自作聰明
+            swipeDistance: 30,
+            startPage: 0
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
         
@@ -171,30 +168,19 @@
         });
     }
 
-    // 核心修復：物理跳轉方案
-    window.absJump = (targetAbsIdx) => {
+    // 終極禁止跳動跳轉方案
+    window.superJump = (targetIdx) => {
         if (!flip) return;
         
-        // 1. 抓取所有具有 .page 類別的元素
-        const allPages = Array.from(document.querySelectorAll('.page'));
-        
-        // 2. 遍歷找出 data-abs-idx 屬性符合目標的那個 DOM 元素
-        const targetElement = allPages.find(el => el.getAttribute('data-abs-idx') == targetAbsIdx);
-        
-        // 3. 獲取該元素在當前 DOM 中的物理順序
-        const realIndex = allPages.indexOf(targetElement);
-        
-        if (realIndex !== -1) {
-            // 直接跳轉到該物理索引
-            flip.turnToPage(realIndex);
-            
-            // 針對 1, 4, 7, 10 等「頑固偏移」進行二次強制校準
-            setTimeout(() => {
-                if (flip.getCurrentPageIndex() !== realIndex) {
-                    flip.turnToPage(realIndex);
-                }
-            }, 50);
-        }
+        // 1. 先用 flip 控制台強制移動到目標
+        // 使用 flip 操作而不僅是 turnToPage 有助於壓制後續的「回彈」
+        flip.flip(targetIdx);
+
+        // 2. 0.1秒後（翻頁動作剛開始），再次強制確認目標位置
+        // 如果是 1, 4, 7, 10，這次強制確認會把「回彈」的可能性壓死
+        setTimeout(() => {
+            flip.turnToPage(targetIdx);
+        }, 100);
     };
 
     function openFull() { window.open(currentImgUrl, '_blank'); }
@@ -238,7 +224,7 @@
     async function sendToLine(isForward = false) {
         const name = isForward ? currentAlbumName : (document.getElementById('album-name').value || "白六快傳相簿");
         const note = isForward ? document.getElementById('forward-note').value : (document.getElementById('album-note').value || "分享一份回憶");
-        const baseLink = `https://liff.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
+        const baseLink = `https://liff.line.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
         const coverUrl = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_500,c_fill,f_auto,q_auto/${uploadedIds[0]}`;
 
         await liff.shareTargetPicker([{
