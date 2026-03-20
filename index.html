@@ -10,24 +10,22 @@
         :root { --line-green: #00b900; --bg: #000; --card: #1e1e1e; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
         
-        /* UI 卡片 */
-        .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; position: relative; }
+        .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
         .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
         .slot img { width: 100%; height: 100%; object-fit: cover; }
         input { width: 100%; padding: 18px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 18px; }
         .btn { background: var(--line-green); color: white; border: none; padding: 18px; border-radius: 16px; font-size: 18px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
 
-        /* 相簿區域 */
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; transition: opacity 0.4s; }
         #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.6) blur(20px); }
 
         #book { z-index: 10; }
-        .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; box-shadow: inset 0 0 100px rgba(0,0,0,0.5); }
+        .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
-        /* 封面：透明感 */
+        /* 封面玻璃感 */
         .page-cover { 
             background: rgba(255, 255, 255, 0.05) !important; 
             backdrop-filter: blur(25px) brightness(0.7);
@@ -37,7 +35,6 @@
         }
         .page-cover h2 { font-size: 34px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 30px #000; line-height: 1.4; }
 
-        /* 封底 */
         .page-back { background: #111 !important; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; cursor: pointer; background: #222; }
@@ -109,21 +106,22 @@
         document.getElementById('setup-ui').style.display = 'none';
         document.getElementById('album-view').style.display = 'flex';
         const book = document.getElementById('book');
-        // 讀取端瘦身：加入 f_auto, q_auto, w_1200
         const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1200/${id}`);
         
         document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
 
-        // 1. 封面
+        // 1. 封面 (索引 0)
         const f = document.createElement('div');
         f.className = 'page page-cover';
         f.innerHTML = `<h2>${titleText}</h2>`;
         book.appendChild(f);
 
-        // 2. 照片頁
+        // 2. 照片頁 (索引 1, 2, 3...)
         urls.forEach((u, i) => {
             const p = document.createElement('div');
             p.className = 'page photo-page';
+            // 標記物理索引
+            p.setAttribute('data-abs-idx', i + 1); 
             p.innerHTML = `<img src="${u}">`;
             book.appendChild(p);
         });
@@ -134,7 +132,7 @@
         let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
         ids.forEach((id, i) => {
             const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill,f_auto,q_auto/${id}`;
-            // 改用絕對索引跳轉：i+1 (跳過封面)
+            // 點擊時直接傳遞目標照片的「物理序號」
             thumbHtml += `<div class="thumb" onclick="event.stopPropagation(); window.absJump(${i+1})"><img src="${t}"></div>`;
         });
         thumbHtml += `<div class="thumb" style="background:#fff;" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
@@ -147,7 +145,8 @@
             usePortrait: true,
             drawShadow: false, 
             flippingTime: 400,
-            clickEventForward: true
+            clickEventForward: true,
+            swipeDistance: 30
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
         
@@ -172,12 +171,30 @@
         });
     }
 
-    // 絕對位置跳轉：解決 4->3, 7->6 的偏移
-    window.absJump = (target) => {
+    // 核心修復：物理跳轉方案
+    window.absJump = (targetAbsIdx) => {
         if (!flip) return;
-        // 直接告訴 PageFlip 要跳轉的整數位置
-        // 封面是 0，第 1 張照片是 1...以此類推
-        flip.turnToPage(parseInt(target));
+        
+        // 1. 抓取所有具有 .page 類別的元素
+        const allPages = Array.from(document.querySelectorAll('.page'));
+        
+        // 2. 遍歷找出 data-abs-idx 屬性符合目標的那個 DOM 元素
+        const targetElement = allPages.find(el => el.getAttribute('data-abs-idx') == targetAbsIdx);
+        
+        // 3. 獲取該元素在當前 DOM 中的物理順序
+        const realIndex = allPages.indexOf(targetElement);
+        
+        if (realIndex !== -1) {
+            // 直接跳轉到該物理索引
+            flip.turnToPage(realIndex);
+            
+            // 針對 1, 4, 7, 10 等「頑固偏移」進行二次強制校準
+            setTimeout(() => {
+                if (flip.getCurrentPageIndex() !== realIndex) {
+                    flip.turnToPage(realIndex);
+                }
+            }, 50);
+        }
     };
 
     function openFull() { window.open(currentImgUrl, '_blank'); }
@@ -192,7 +209,6 @@
         } catch (err) { window.open(currentImgUrl, '_blank'); }
     }
 
-    // 上傳邏輯：移除會出錯的 transformation 參數，回歸穩定版本
     document.getElementById('file-input').onchange = async (e) => {
         const files = Array.from(e.target.files);
         const grid = document.getElementById('grid');
@@ -200,9 +216,7 @@
         document.getElementById('up-btn').innerText = "上傳中...";
         for (const file of files) {
             const fd = new FormData();
-            fd.append('file', file); 
-            fd.append('upload_preset', CONFIG.preset);
-            
+            fd.append('file', file); fd.append('upload_preset', CONFIG.preset);
             const r = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.name}/image/upload`, { method: 'POST', body: fd });
             const d = await r.json();
             if (d.public_id) {
@@ -224,7 +238,7 @@
     async function sendToLine(isForward = false) {
         const name = isForward ? currentAlbumName : (document.getElementById('album-name').value || "白六快傳相簿");
         const note = isForward ? document.getElementById('forward-note').value : (document.getElementById('album-note').value || "分享一份回憶");
-        const baseLink = `https://liff.line.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
+        const baseLink = `https://liff.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
         const coverUrl = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_500,c_fill,f_auto,q_auto/${uploadedIds[0]}`;
 
         await liff.shareTargetPicker([{
