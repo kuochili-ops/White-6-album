@@ -19,18 +19,23 @@
 
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; transition: opacity 0.5s; }
-        #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.5) blur(20px); }
+        #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.6) blur(25px); }
 
+        /* 相簿本體與點擊層 */
+        #book-container { position: relative; z-index: 10; }
         #book { z-index: 10; }
         .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
+        /* 透明磨砂封面 */
         .page-cover { 
-            background: linear-gradient(135deg, #222, #000) !important;
+            background: rgba(255, 255, 255, 0.05) !important; 
+            backdrop-filter: blur(25px) brightness(0.7);
+            -webkit-backdrop-filter: blur(25px) brightness(0.7);
             display: flex; align-items: center; justify-content: center;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .page-cover h2 { font-size: 30px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 5px 15px #000; }
+        .page-cover h2 { font-size: 32px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 30px #000; line-height: 1.4; }
 
         .page-back { background: #111 !important; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-bottom: 30px; }
@@ -40,6 +45,10 @@
         #page-num { position: fixed; bottom: 100px; color: #ccc; font-size: 13px; z-index: 1001; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; }
         .tools { position: fixed; bottom: 30px; display: flex; gap: 12px; z-index: 1001; }
         .tool-btn { background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 12px 25px; border-radius: 30px; color: #fff; font-size: 14px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; }
+
+        /* 點觸翻頁透明層 */
+        #click-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: flex; }
+        .click-zone { width: 50%; height: 100%; }
     </style>
 </head>
 <body>
@@ -63,7 +72,13 @@
 
 <div id="album-view">
     <div id="album-underlay"></div>
-    <div id="book"></div>
+    <div id="book-container">
+        <div id="book"></div>
+        <div id="click-overlay">
+            <div class="click-zone" onclick="flip.flipPrev()"></div>
+            <div class="click-zone" onclick="flip.flipNext()"></div>
+        </div>
+    </div>
     <div id="page-num">封面</div>
     <div class="tools" id="action-tools" style="display:none;">
         <div class="tool-btn" onclick="openFull()">🔍 放大</div>
@@ -107,7 +122,7 @@
         
         document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
 
-        // 1. 封面 (索引 0)
+        // 1. 透明封面 (索引 0)
         const f = document.createElement('div');
         f.className = 'page page-cover';
         f.innerHTML = `<h2>${titleText}</h2>`;
@@ -121,29 +136,26 @@
             book.appendChild(p);
         });
 
-        // 3. 封底 (索引 urls.length + 1)
+        // 3. 封底
         const b = document.createElement('div');
         b.className = 'page page-back';
         let thumbHtml = `<div style="font-size:12px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
         ids.forEach((id, i) => {
             const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill,f_auto,q_auto/${id}`;
-            // 點擊縮圖：直接對應實體索引 i + 1
             thumbHtml += `<div class="thumb" onclick="event.stopPropagation(); flip.turnToPage(${i+1})"><img src="${t}"></div>`;
         });
         thumbHtml += `<div class="thumb" style="background:#fff;" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
         b.innerHTML = thumbHtml;
         book.appendChild(b);
 
-        // 核心設定：徹底關閉所有預設配對邏輯
         flip = new St.PageFlip(book, { 
             width: 320, height: 480, 
-            showCover: false,      // 重要：設為 false 讓所有頁面成為「單頁序列」
+            showCover: false, 
             usePortrait: true,
             drawShadow: true, 
-            flippingTime: 400,
-            clickEventForward: false, // 禁止點擊自動翻頁
-            swipeDistance: 30,
-            disableFlipByClick: true  // 徹底禁止點擊頁面本身翻動，改由滑動或按鈕控制
+            flippingTime: 500,
+            clickEventForward: false, // 核心：關閉引擎內建點擊
+            disableFlipByClick: true  // 徹底禁止內建翻頁
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
         
@@ -151,6 +163,11 @@
             const idx = e.data;
             const tools = document.getElementById('action-tools');
             const underlay = document.getElementById('album-underlay');
+            const overlay = document.getElementById('click-overlay');
+
+            // 封底隱藏點擊層，讓縮圖可以被點擊
+            overlay.style.display = (idx > urls.length) ? 'none' : 'flex';
+
             if (idx === 0) {
                 document.getElementById('page-num').innerText = "封面";
                 tools.style.display = "none";
