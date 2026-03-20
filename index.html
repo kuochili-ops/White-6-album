@@ -10,7 +10,7 @@
         :root { --line-green: #00b900; --bg: #000000; --card: #1e1e1e; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
         
-        /* 介面樣式 */
+        /* UI 介面 */
         .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
         .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
@@ -21,30 +21,28 @@
         /* 相簿區域 */
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         
-        /* 磨砂底層 (封面透明時看到的背景) */
+        /* 磨砂底層 */
         #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; transition: opacity 0.4s; }
-        #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.7) blur(10px); }
+        #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.6) blur(15px); }
 
         #book { z-index: 10; background: transparent !important; }
         .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
-        /* 封面：大幅增加透明度 */
+        /* 封面：高透明玻璃感 */
         .page-cover { 
-            background: rgba(255, 255, 255, 0.1) !important; /* 極低透明白，營造玻璃感 */
-            backdrop-filter: blur(15px) brightness(0.8);
-            -webkit-backdrop-filter: blur(15px) brightness(0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background: rgba(255, 255, 255, 0.05) !important; 
+            backdrop-filter: blur(20px) brightness(0.7);
+            -webkit-backdrop-filter: blur(20px) brightness(0.7);
+            display: flex; align-items: center; justify-content: center;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .page-cover h2 { font-size: 34px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 30px rgba(0,0,0,0.8); line-height: 1.4; }
+        .page-cover h2 { font-size: 34px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 30px rgba(0,0,0,1); line-height: 1.4; }
 
         /* 封底 */
         .page-back { background: #111 !important; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; cursor: pointer; background: #222; }
+        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; cursor: pointer; background: #222; position: relative; }
         .thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
         #page-num { position: fixed; bottom: 100px; color: #fff; font-size: 14px; z-index: 1001; background: rgba(0,0,0,0.6); padding: 6px 18px; border-radius: 20px; pointer-events: none; }
@@ -115,7 +113,6 @@
         const book = document.getElementById('book');
         const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1000/${id}`);
         
-        // 設定封面底圖
         document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
 
         // 1. 封面 (0)
@@ -138,8 +135,8 @@
         let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
         ids.forEach((id, i) => {
             const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}`;
-            // 精準絕對跳轉：照片從索引 1 開始
-            thumbHtml += `<div class="thumb" onclick="handleJump(${i+1})"><img src="${t}"></div>`;
+            // 修正：手動觸發跳轉，傳入正確索引 i+1
+            thumbHtml += `<div class="thumb" onclick="event.stopPropagation(); window.handleJump(${i+1})"><img src="${t}"></div>`;
         });
         thumbHtml += `<div class="thumb" style="background:#fff;" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
         b.innerHTML = thumbHtml;
@@ -149,9 +146,8 @@
             width: 320, height: 480, 
             showCover: false, 
             usePortrait: true,
-            drawShadow: false, // 關閉陰影以維持透明度純淨
+            drawShadow: false, 
             flippingTime: 400,
-            disableFlipByClick: false,
             clickEventForward: true
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
@@ -160,16 +156,15 @@
             const idx = e.data;
             const tools = document.getElementById('action-tools');
             const underlay = document.getElementById('album-underlay');
-            
             if (idx === 0) {
                 document.getElementById('page-num').innerText = "封面";
                 tools.style.display = "none";
-                underlay.style.opacity = "1"; // 封面時顯示底圖
+                underlay.style.opacity = "1";
             } else if (idx <= urls.length) {
                 document.getElementById('page-num').innerText = `${idx} / ${urls.length}`;
                 currentImgUrl = urls[idx - 1];
                 tools.style.display = "flex";
-                underlay.style.opacity = "0"; // 進入內容後隱藏底圖
+                underlay.style.opacity = "0";
             } else {
                 document.getElementById('page-num').innerText = "封底";
                 tools.style.display = "none";
@@ -178,12 +173,18 @@
         });
     }
 
-    // 絕對定位跳轉函數
-    window.handleJump = (target) => {
-        if (flip) {
-            // 先阻止任何正在進行的動畫，強制跳轉
-            flip.turnToPage(parseInt(target));
-        }
+    // 終極絕對跳轉函數
+    window.handleJump = (targetIdx) => {
+        if (!flip) return;
+        // 使用 turnToPage 進行物理跳轉
+        flip.turnToPage(parseInt(targetIdx));
+        
+        // 雙重檢查：如果 100ms 後索引不對，強制修正 (針對部分設備的 PageFlip 緩存問題)
+        setTimeout(() => {
+            if (flip.getCurrentPageIndex() !== targetIdx) {
+                flip.turnToPage(parseInt(targetIdx));
+            }
+        }, 100);
     };
 
     function openFull() { window.open(currentImgUrl, '_blank'); }
