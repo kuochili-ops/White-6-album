@@ -10,7 +10,7 @@
         :root { --line-green: #00b900; --bg: #000; --card: #1e1e1e; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; -webkit-tap-highlight-color: transparent; }
         
-        /* UI 介面 */
+        /* UI 卡片 */
         .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
         .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
@@ -18,18 +18,16 @@
         input { width: 100%; padding: 18px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 16px; outline: none; }
         .btn { background: var(--line-green); color: white; border: none; padding: 18px; border-radius: 16px; font-size: 18px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
 
-        /* 相簿區域 */
+        /* 相簿視圖 */
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; transition: opacity 0.6s ease; }
         #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.7) blur(20px); }
 
-        /* 書本容器 */
         #book-container { position: relative; z-index: 10; }
-        #book { z-index: 10; }
         .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
-        /* 高透明磨砂封面 */
+        /* 磨砂封面 CSS */
         .page-cover { 
             background: rgba(255, 255, 255, 0.02) !important; 
             backdrop-filter: blur(15px) brightness(0.8);
@@ -39,7 +37,7 @@
         }
         .page-cover h2 { font-size: 32px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 20px rgba(0,0,0,0.8); line-height: 1.4; z-index: 5; }
 
-        /* 封底快速跳頁 */
+        /* 封底跳頁 */
         .page-back { background: #111 !important; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-bottom: 40px; }
         .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #333; cursor: pointer; position: relative; z-index: 1100; }
@@ -61,7 +59,7 @@
         <button class="btn" id="up-btn" onclick="document.getElementById('file-input').click()">+ 選擇照片</button>
         <input type="file" id="file-input" multiple accept="image/*" style="display:none">
         <div id="create-info" style="display:none;">
-            <input type="text" id="album-name" placeholder="相簿標標題">
+            <input type="text" id="album-name" placeholder="相簿標題">
             <input type="text" id="album-note" placeholder="留言...">
             <button class="btn" style="background:#fff; color:#000;" onclick="sendToLine()">搜尋對象並傳送</button>
         </div>
@@ -117,12 +115,13 @@
         
         document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
 
+        // 頁面生成 (0:封面, 1~N:照片, N+1:封底)
         const f = document.createElement('div');
         f.className = 'page page-cover';
         f.innerHTML = `<h2>${titleText}</h2>`;
         book.appendChild(f);
 
-        urls.forEach((u, i) => {
+        urls.forEach((u) => {
             const p = document.createElement('div');
             p.className = 'page photo-page';
             p.innerHTML = `<img src="${u}">`;
@@ -140,24 +139,32 @@
         b.innerHTML = thumbHtml;
         book.appendChild(b);
 
+        // 參數調整：flippingTime 縮短至 400ms 讓回翻更乾脆
         flip = new St.PageFlip(book, { 
             width: 320, height: 480, 
             showCover: false, 
             usePortrait: true,
             drawShadow: true, 
-            flippingTime: 500,
+            flippingTime: 400, 
             useMouseEvents: true,
             clickEventForward: false,
             disableFlipByClick: true
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
 
+        // 優化後的物理點擊判斷
         document.getElementById('book-container').onclick = (e) => {
             const rect = book.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const currentIdx = flip.getCurrentPageIndex();
-            if (currentIdx > urls.length) return;
-            if (x < rect.width * 0.4) { flip.flipPrev(); } else { flip.flipNext(); }
+            if (currentIdx > urls.length) return; // 封底不干涉
+
+            // 稍微調寬左側感應區至 45%，讓回翻更輕鬆
+            if (x < rect.width * 0.45) { 
+                flip.flipPrev(); 
+            } else { 
+                flip.flipNext(); 
+            }
         };
         
         flip.on('flip', (e) => {
@@ -222,7 +229,6 @@
     async function sendToLine(isForward = false) {
         const name = isForward ? currentAlbumName : (document.getElementById('album-name').value || "白六快傳相簿");
         const note = isForward ? document.getElementById('forward-note').value : (document.getElementById('album-note').value || "分享一份回憶");
-        // *** 修正點：將 liff.me 改回官方的 liff.line.me ***
         const baseLink = `https://liff.line.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
         const coverUrl = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_500,c_fill,f_auto,q_auto/${uploadedIds[0]}`;
 
