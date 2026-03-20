@@ -1,19 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>𓃥 白六快傳相簿</title>
+    <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        :root { --line-green: #00b900; --bg: #000000; --card: #1e1e1e; }
+        body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
+        
+        /* 介面樣式 */
+        .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
+        .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
+        .slot img { width: 100%; height: 100%; object-fit: cover; }
+        input { width: 100%; padding: 18px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 18px; }
+        .btn { background: var(--line-green); color: white; border: none; padding: 18px; border-radius: 16px; font-size: 18px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
+
+        /* 相簿區域 */
+        #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
+        
+        /* 磨砂底層 (封面透明時看到的背景) */
+        #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; transition: opacity 0.4s; }
+        #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.7) blur(10px); }
+
+        #book { z-index: 10; background: transparent !important; }
+        .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
+        .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+
+        /* 封面：大幅增加透明度 */
+        .page-cover { 
+            background: rgba(255, 255, 255, 0.1) !important; /* 極低透明白，營造玻璃感 */
+            backdrop-filter: blur(15px) brightness(0.8);
+            -webkit-backdrop-filter: blur(15px) brightness(0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .page-cover h2 { font-size: 34px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 30px rgba(0,0,0,0.8); line-height: 1.4; }
+
+        /* 封底 */
+        .page-back { background: #111 !important; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; cursor: pointer; background: #222; }
+        .thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+
+        #page-num { position: fixed; bottom: 100px; color: #fff; font-size: 14px; z-index: 1001; background: rgba(0,0,0,0.6); padding: 6px 18px; border-radius: 20px; pointer-events: none; }
+        .tools { position: fixed; bottom: 30px; display: flex; gap: 12px; z-index: 1001; }
+        .tool-btn { background: rgba(255,255,255,0.2); backdrop-filter: blur(12px); padding: 12px 25px; border-radius: 30px; color: #fff; font-size: 14px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="setup-ui" class="ui-card">
+    <div style="font-size:45px; margin-bottom:5px;">𓃥</div>
+    <p style="color: var(--line-green); font-weight: bold; font-size: 16px; margin-bottom: 15px;">𓃥 白六快傳相簿</p>
+    <h3 id="ui-title">製作新相簿</h3>
+    <div class="grid" id="grid"></div>
+    <div id="create-mode-ui">
+        <button class="btn" id="up-btn" onclick="document.getElementById('file-input').click()">+ 選擇照片</button>
+        <input type="file" id="file-input" multiple accept="image/*" style="display:none">
+        <div id="create-info" style="display:none;">
+            <input type="text" id="album-name" placeholder="相簿標題">
+            <input type="text" id="album-note" placeholder="留言...">
+            <button class="btn" style="background:#fff; color:#000;" onclick="sendToLine()">搜尋對象並傳送</button>
+        </div>
+    </div>
+    <div id="forward-mode-ui" style="display:none;"><input type="text" id="forward-note" placeholder="修改分享留言..."><button class="btn" style="background: var(--line-green); color:#fff;" onclick="sendToLine(true)">搜尋對象並傳送</button></div>
+</div>
+
+<div id="album-view">
+    <div id="album-underlay"></div>
+    <div id="book"></div>
+    <div id="page-num">封面</div>
+    <div class="tools" id="action-tools" style="display:none;">
+        <div class="tool-btn" onclick="openFull()">🔍 放大</div>
+        <div class="tool-btn" onclick="downloadImg()">📥 下載</div>
+    </div>
+</div>
+
 <script>
-    // ... 前段 init 與 renderBook 保持不變 ...
+    const CONFIG = { name: 'dnwwaush7', preset: 'white6_album', liffId: '2009222789-M8aFcFM7' };
+    const LOGO_URL = "IMG_6604 2.png";
+    let uploadedIds = [];
+    let currentImgUrl = "";
+    let flip;
+    let currentAlbumName = "";
+
+    async function init() {
+        await liff.init({ liffId: CONFIG.liffId });
+        const params = new URLSearchParams(window.location.search);
+        const ids = params.get('ids');
+        const mode = params.get('mode');
+        currentAlbumName = decodeURIComponent(params.get('name') || "白六相簿");
+        if (ids) {
+            uploadedIds = ids.split(',');
+            if (mode === 'forward') {
+                document.getElementById('ui-title').innerText = "轉傳分享相簿";
+                document.getElementById('create-mode-ui').style.display = 'none';
+                document.getElementById('forward-mode-ui').style.display = 'block';
+                document.getElementById('forward-note').value = decodeURIComponent(params.get('note') || "");
+                showGridPreview();
+            } else {
+                renderBook(uploadedIds, currentAlbumName);
+            }
+        }
+    }
 
     function renderBook(ids, titleText) {
-        // ... 中間節點建立保持不變 ...
+        document.getElementById('setup-ui').style.display = 'none';
+        document.getElementById('album-view').style.display = 'flex';
+        const book = document.getElementById('book');
+        const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1000/${id}`);
         
-        // 封底縮圖生成邏輯：確保 onclick 傳入正確的絕對索引
+        // 設定封面底圖
+        document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
+
+        // 1. 封面 (0)
+        const f = document.createElement('div');
+        f.className = 'page page-cover';
+        f.innerHTML = `<h2>${titleText}</h2>`;
+        book.appendChild(f);
+
+        // 2. 照片 (1 ~ N)
+        urls.forEach(u => {
+            const p = document.createElement('div');
+            p.className = 'page';
+            p.innerHTML = `<img src="${u}">`;
+            book.appendChild(p);
+        });
+
+        // 3. 封底 (N+1)
+        const b = document.createElement('div');
+        b.className = 'page page-back';
         let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
         ids.forEach((id, i) => {
             const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}`;
-            // 第 1 張圖(i=0) 對應 PageFlip 的索引 1
-            // 加上 event.preventDefault() 確保點擊純淨
-            thumbHtml += `
-                <div class="thumb" onclick="handleThumbClick(event, ${i + 1})">
-                    <img src="${t}">
-                </div>`;
+            // 精準絕對跳轉：照片從索引 1 開始
+            thumbHtml += `<div class="thumb" onclick="handleJump(${i+1})"><img src="${t}"></div>`;
         });
         thumbHtml += `<div class="thumb" style="background:#fff;" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
         b.innerHTML = thumbHtml;
@@ -23,38 +149,109 @@
             width: 320, height: 480, 
             showCover: false, 
             usePortrait: true,
-            drawShadow: false, 
+            drawShadow: false, // 關閉陰影以維持透明度純淨
             flippingTime: 400,
             disableFlipByClick: false,
-            clickEventForward: true,
-            swipeDistance: 30 // 提高滑動靈敏度
+            clickEventForward: true
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
         
-        // ... flip.on('flip') 監聽保持不變 ...
+        flip.on('flip', (e) => {
+            const idx = e.data;
+            const tools = document.getElementById('action-tools');
+            const underlay = document.getElementById('album-underlay');
+            
+            if (idx === 0) {
+                document.getElementById('page-num').innerText = "封面";
+                tools.style.display = "none";
+                underlay.style.opacity = "1"; // 封面時顯示底圖
+            } else if (idx <= urls.length) {
+                document.getElementById('page-num').innerText = `${idx} / ${urls.length}`;
+                currentImgUrl = urls[idx - 1];
+                tools.style.display = "flex";
+                underlay.style.opacity = "0"; // 進入內容後隱藏底圖
+            } else {
+                document.getElementById('page-num').innerText = "封底";
+                tools.style.display = "none";
+                underlay.style.opacity = "0";
+            }
+        });
     }
 
-    // 建立一個專門處理縮圖點擊的函數
-    window.handleThumbClick = (e, targetIndex) => {
-        if (e) {
-            e.stopPropagation();
-            e.preventDefault();
-        }
-        
+    // 絕對定位跳轉函數
+    window.handleJump = (target) => {
         if (flip) {
-            // 1. 取得當前狀態
-            const currentState = flip.getState(); // 'read', 'flipper', 'user_fold'
-            
-            // 2. 如果正在翻頁中，先強制結束
-            // 3. 執行絕對跳轉
-            flip.turnToPage(parseInt(targetIndex));
-            
-            console.log("跳轉至照片索引:", targetIndex);
+            // 先阻止任何正在進行的動畫，強制跳轉
+            flip.turnToPage(parseInt(target));
         }
     };
 
-    // 為了相容性保留舊名
-    window.goToPage = (n) => window.handleThumbClick(null, n);
+    function openFull() { window.open(currentImgUrl, '_blank'); }
+    
+    async function downloadImg() {
+        try {
+            const response = await fetch(currentImgUrl);
+            const blob = await response.blob();
+            const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
+            if (navigator.share) { await navigator.share({ files: [file] }); } 
+            else { window.open(currentImgUrl, '_blank'); }
+        } catch (err) { window.open(currentImgUrl, '_blank'); }
+    }
 
-    // ... 後段上傳與 Line 分享邏輯保持不變 ...
+    document.getElementById('file-input').onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        const grid = document.getElementById('grid');
+        grid.innerHTML = ""; uploadedIds = [];
+        document.getElementById('up-btn').innerText = "上傳中...";
+        for (const file of files) {
+            const fd = new FormData();
+            fd.append('file', file); fd.append('upload_preset', CONFIG.preset);
+            const r = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.name}/image/upload`, { method: 'POST', body: fd });
+            const d = await r.json();
+            if (d.public_id) {
+                uploadedIds.push(d.public_id);
+                grid.innerHTML += `<div class="slot"><img src="${d.secure_url}"></div>`;
+            }
+        }
+        document.getElementById('up-btn').innerText = "上傳完畢";
+        document.getElementById('create-info').style.display = 'block';
+    };
+
+    function showGridPreview() {
+        const grid = document.getElementById('grid'); grid.innerHTML = "";
+        uploadedIds.forEach(id => {
+            grid.innerHTML += `<div class="slot"><img src="https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}"></div>`;
+        });
+    }
+
+    async function sendToLine(isForward = false) {
+        const name = isForward ? currentAlbumName : (document.getElementById('album-name').value || "白六快傳相簿");
+        const note = isForward ? document.getElementById('forward-note').value : (document.getElementById('album-note').value || "分享一份回憶");
+        const baseLink = `https://liff.line.me/${CONFIG.liffId}/?ids=${uploadedIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}`;
+        const coverUrl = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_500,c_fill/${uploadedIds[0]}`;
+
+        await liff.shareTargetPicker([{
+            "type": "flex", "altText": `𓃥 白六快傳相簿：${name}`,
+            "contents": {
+                "type": "bubble",
+                "hero": { "type": "image", "url": coverUrl, "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                "body": { "type": "box", "layout": "vertical", "contents": [
+                    { "type": "text", "text": "𓃥 白六快傳相簿", "size": "xs", "color": "#aaaaaa" },
+                    { "type": "text", "text": name, "weight": "bold", "color": "#00b900", "size": "xl", "margin": "xs" },
+                    { "type": "text", "text": note, "size": "md", "color": "#555555", "wrap": true, "margin": "md" }
+                ]},
+                "footer": { "type": "box", "layout": "vertical", "contents": [
+                    { "type": "button", "action": { "type": "uri", "label": "翻閱相簿", "uri": baseLink }, "style": "primary", "color": "#00b900" },
+                    { "type": "box", "layout": "horizontal", "margin": "sm", "spacing": "sm", "contents": [
+                        { "type": "button", "action": { "type": "uri", "label": "轉傳分享", "uri": baseLink + "&mode=forward" }, "style": "secondary", "height": "sm" },
+                        { "type": "button", "action": { "type": "uri", "label": "製作新相簿", "uri": `https://liff.line.me/${CONFIG.liffId}/` }, "style": "link", "height": "sm" }
+                    ]}
+                ]}
+            }
+        }]);
+        liff.closeWindow();
+    }
+    init();
 </script>
+</body>
+</html>
