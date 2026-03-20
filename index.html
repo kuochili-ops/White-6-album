@@ -10,6 +10,7 @@
         :root { --line-green: #00b900; --bg: #121212; --card: #1e1e1e; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
         
+        /* 基礎介面樣式 */
         .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
         .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
@@ -17,28 +18,30 @@
         input { width: 100%; padding: 18px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 18px; }
         .btn { background: var(--line-green); color: white; border: none; padding: 18px; border-radius: 16px; font-size: 18px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
 
+        /* 相簿顯示區 */
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         
-        #book { z-index: 10; cursor: pointer; }
+        /* 預覽底圖 (磨砂背景) */
+        #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; transition: opacity 0.3s; }
+        #album-underlay img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.6); }
+
+        #book { z-index: 10; }
         .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
-        /* 封面樣式 */
+        /* 封面：強制透明與磨砂 */
         .page-cover { 
-            background: #1a1a1a !important; 
-            display: flex; align-items: center; justify-content: center; 
-            box-shadow: inset 0 0 100px #000;
+            background: rgba(0, 0, 0, 0.4) !important;
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            display: flex; align-items: center; justify-content: center;
         }
-        .page-cover h2 { font-size: 34px; color: #fff; text-align: center; font-weight: bold; padding: 30px; line-height: 1.5; }
+        .page-cover h2 { font-size: 34px; color: #fff; text-align: center; font-weight: bold; padding: 30px; text-shadow: 0 4px 20px #000; }
 
-        /* 封底樣式 */
+        /* 封底縮圖：確保點擊穿透 */
         .page-back { background: #111 !important; padding: 20px; box-sizing: border-box; overflow-y: auto; }
-        .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; pointer-events: auto; }
-        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; cursor: pointer; }
-        .thumb img { width: 100%; height: 100%; object-fit: cover; }
-
-        /* 透明翻頁熱區 */
-        .click-layer { position: absolute; top: 0; right: 0; width: 40%; height: 80%; z-index: 15; }
+        .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; cursor: pointer; background: #222; position: relative; z-index: 100; }
+        .thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
         #page-num { position: fixed; bottom: 100px; color: #fff; font-size: 14px; z-index: 1001; background: rgba(0,0,0,0.6); padding: 6px 18px; border-radius: 20px; pointer-events: none; }
         .tools { position: fixed; bottom: 30px; display: flex; gap: 12px; z-index: 1001; }
@@ -65,7 +68,7 @@
 </div>
 
 <div id="album-view">
-    <div class="click-layer" onclick="flipNextPage()"></div>
+    <div id="album-underlay"></div>
     <div id="book"></div>
     <div id="page-num">封面</div>
     <div class="tools" id="action-tools" style="display:none;">
@@ -108,13 +111,16 @@
         const book = document.getElementById('book');
         const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1000/${id}`);
         
-        // 1. 封面 (索引 0)
+        // 預覽底圖 (用第一張照片)
+        document.getElementById('album-underlay').innerHTML = `<img src="${urls[0]}">`;
+
+        // 1. 封面 (Index 0)
         const f = document.createElement('div');
         f.className = 'page page-cover';
         f.innerHTML = `<h2>${titleText}</h2>`;
         book.appendChild(f);
 
-        // 2. 照片頁 (索引 1 ~ ids.length)
+        // 2. 照片頁 (Index 1 ~ N)
         urls.forEach(u => {
             const p = document.createElement('div');
             p.className = 'page';
@@ -128,20 +134,20 @@
         let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
         ids.forEach((id, i) => {
             const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}`;
-            // 跳頁修正：第一張照片在索引 1
-            thumbHtml += `<div class="thumb" onclick="goToPage(${i+1})"><img src="${t}"></div>`;
+            // 修正點擊事件：使用 i+1 並確保 event 停止傳遞
+            thumbHtml += `<div class="thumb" onclick="event.stopPropagation(); goToPage(${i+1})"><img src="${t}"></div>`;
         });
-        thumbHtml += `<div class="thumb" style="background:#fff;" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
+        thumbHtml += `<div class="thumb" style="background:#fff;" onclick="event.stopPropagation(); window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
         b.innerHTML = thumbHtml;
         book.appendChild(b);
 
         flip = new St.PageFlip(book, { 
             width: 320, height: 480, 
-            showCover: false, // 關鍵：關閉內建封面模式以消除跳動
+            showCover: false, 
             usePortrait: true,
-            drawShadow: true, 
-            flippingTime: 500,
-            disableFlipByClick: false,
+            drawShadow: false, 
+            flippingTime: 450,
+            disableFlipByClick: false, // 恢復內建點擊翻頁
             clickEventForward: true
         });
         flip.loadFromHTML(document.querySelectorAll('.page'));
@@ -149,24 +155,31 @@
         flip.on('flip', (e) => {
             const idx = e.data;
             const tools = document.getElementById('action-tools');
+            const underlay = document.getElementById('album-underlay');
+            
             if (idx === 0) {
                 document.getElementById('page-num').innerText = "封面";
                 tools.style.display = "none";
+                underlay.style.opacity = "1";
             } else if (idx <= urls.length) {
                 document.getElementById('page-num').innerText = `${idx} / ${urls.length}`;
                 currentImgUrl = urls[idx - 1];
                 tools.style.display = "flex";
+                underlay.style.opacity = "0";
             } else {
                 document.getElementById('page-num').innerText = "封底";
                 tools.style.display = "none";
+                underlay.style.opacity = "0";
             }
         });
     }
 
-    function flipNextPage() { if(flip) flip.flipNext(); }
-    
+    // 全域跳頁函數
     window.goToPage = (n) => { 
-        if(flip) flip.flip(n); 
+        if(flip) {
+            // 使用 turnToPage 確保絕對位置跳轉，而非動畫翻頁
+            flip.turnToPage(parseInt(n));
+        }
     };
 
     function openFull() { window.open(currentImgUrl, '_blank'); }
@@ -181,7 +194,7 @@
         } catch (err) { window.open(currentImgUrl, '_blank'); }
     }
 
-    // 其餘上傳/分享邏輯...
+    // 上傳與傳送邏輯 (維持原樣)
     document.getElementById('file-input').onchange = async (e) => {
         const files = Array.from(e.target.files);
         const grid = document.getElementById('grid');
@@ -228,7 +241,7 @@
                     { "type": "button", "action": { "type": "uri", "label": "翻閱相簿", "uri": baseLink }, "style": "primary", "color": "#00b900" },
                     { "type": "box", "layout": "horizontal", "margin": "sm", "spacing": "sm", "contents": [
                         { "type": "button", "action": { "type": "uri", "label": "轉傳分享", "uri": baseLink + "&mode=forward" }, "style": "secondary", "height": "sm" },
-                        { "type": "button", "action": { "type": "uri", "label": "製作新相簿", "uri": `https://liff.me/${CONFIG.liffId}/` }, "style": "link", "height": "sm" }
+                        { "type": "button", "action": { "type": "uri", "label": "製作新相簿", "uri": `https://liff.line.me/${CONFIG.liffId}/` }, "style": "link", "height": "sm" }
                     ]}
                 ]}
             }
