@@ -10,7 +10,7 @@
         :root { --line-green: #00b900; --bg: #121212; --card: #1e1e1e; }
         body { background: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
         
-        /* 製作介面：加大文字與間距 */
+        /* UI 介面優化 */
         .ui-card { width: 90%; max-width: 400px; padding: 25px; text-align: center; background: var(--card); border-radius: 28px; border: 1px solid #333; z-index: 2000; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; max-height: 200px; overflow-y: auto; }
         .slot { aspect-ratio: 1/1; background: #2a2a2a; border-radius: 12px; overflow: hidden; }
@@ -18,36 +18,34 @@
         input { width: 100%; padding: 18px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 18px; }
         .btn { background: var(--line-green); color: white; border: none; padding: 18px; border-radius: 16px; font-size: 18px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; }
 
-        /* 相簿顯示區域 */
+        /* 相簿顯示 */
         #album-view { display: none; width: 100vw; height: 100vh; background: #000; position: fixed; top: 0; left: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
-        
-        /* 修正跳動的關鍵：預覽圖容器 */
         #album-underlay { position: absolute; width: 320px; height: 480px; z-index: 1; overflow: hidden; pointer-events: none; }
         #album-underlay img { width: 100%; height: 100%; object-fit: cover; }
 
-        #book { z-index: 10; transform: translateZ(0); }
-        .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; backface-visibility: hidden; }
+        #book { z-index: 10; }
+        .page { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
         .page img { width: 100%; height: 100%; object-fit: contain; }
 
-        /* 封面：磨砂玻璃，強化文字辨識 */
+        /* 封面樣式 */
         .page.cover-front { 
-            background: rgba(0, 0, 0, 0.2) !important;
-            backdrop-filter: blur(25px) brightness(0.6);
-            -webkit-backdrop-filter: blur(25px) brightness(0.6);
+            background: rgba(0, 0, 0, 0.4) !important;
+            backdrop-filter: blur(20px) brightness(0.6);
+            -webkit-backdrop-filter: blur(20px) brightness(0.6);
             display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
         }
-        .page.cover-front h2 { font-size: 38px; color: #fff; text-shadow: 0 4px 25px rgba(0,0,0,0.9); text-align: center; font-weight: bold; padding: 25px; line-height: 1.4; }
+        .page.cover-front h2 { font-size: 38px; color: #fff; text-shadow: 0 4px 20px #000; text-align: center; font-weight: bold; padding: 30px; }
 
-        /* 封底縮圖 */
+        /* 封底樣式 */
         .page.cover-back { background: #111 !important; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
         .back-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
-        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #333; cursor: pointer; }
-        .thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .thumb.logo-slot { background: #fff; border: 2.5px solid var(--line-green); }
+        .thumb { aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #444; position: relative; z-index: 50; }
+        .thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
-        #page-num { position: fixed; bottom: 100px; color: #fff; font-size: 14px; z-index: 1001; background: rgba(0,0,0,0.6); padding: 6px 18px; border-radius: 20px; }
+        #page-num { position: fixed; bottom: 100px; color: #fff; font-size: 14px; z-index: 1001; background: rgba(0,0,0,0.6); padding: 6px 18px; border-radius: 20px; pointer-events: none; }
         .tools { position: fixed; bottom: 30px; display: flex; gap: 12px; z-index: 1001; }
-        .tool-btn { background: rgba(255,255,255,0.2); backdrop-filter: blur(12px); padding: 12px 25px; border-radius: 30px; color: #fff; font-size: 14px; text-decoration: none; border: 1px solid rgba(255,255,255,0.2); }
+        .tool-btn { background: rgba(255,255,255,0.2); backdrop-filter: blur(12px); padding: 12px 25px; border-radius: 30px; color: #fff; font-size: 14px; text-decoration: none; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
     </style>
 </head>
 <body>
@@ -56,9 +54,7 @@
     <div style="font-size:45px; margin-bottom:5px;">𓃥</div>
     <p style="color: var(--line-green); font-weight: bold; font-size: 16px; margin-bottom: 15px;">𓃥 白六快傳相簿</p>
     <h3 id="ui-title" style="margin-top:0;">製作新相簿</h3>
-    
     <div class="grid" id="grid"></div>
-    
     <div id="create-mode-ui">
         <button class="btn" id="up-btn" onclick="document.getElementById('file-input').click()">+ 選擇照片</button>
         <input type="file" id="file-input" multiple accept="image/*" style="display:none">
@@ -68,7 +64,6 @@
             <button class="btn" style="background:#fff; color:#000;" onclick="sendToLine()">搜尋對象並傳送</button>
         </div>
     </div>
-
     <div id="forward-mode-ui" style="display:none;">
         <input type="text" id="forward-note" placeholder="修改分享留言...">
         <button class="btn" style="background: var(--line-green); color:#fff;" onclick="sendToLine(true)">搜尋對象並傳送</button>
@@ -80,8 +75,8 @@
     <div id="book"></div>
     <div id="page-num">封面</div>
     <div class="tools" id="action-tools" style="display:none;">
-        <a href="javascript:void(0)" class="tool-btn" onclick="openFull()">🔍 放大觀賞</a>
-        <a href="javascript:void(0)" class="tool-btn" id="dl-link" download>📥 下載照片</a>
+        <div class="tool-btn" onclick="openFull()">🔍 放大觀賞</div>
+        <div class="tool-btn" onclick="downloadImg()">📥 下載照片</div>
     </div>
 </div>
 
@@ -114,6 +109,93 @@
         }
     }
 
+    function renderBook(ids, titleText) {
+        document.getElementById('setup-ui').style.display = 'none';
+        document.getElementById('album-view').style.display = 'flex';
+        const book = document.getElementById('book');
+        const underlay = document.getElementById('album-underlay');
+        const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1000/${id}`);
+
+        underlay.innerHTML = `<img src="${urls[0]}">`;
+
+        // 封面 (Page 0)
+        const f = document.createElement('div');
+        f.className = 'page cover-front';
+        f.onclick = () => flip.flipNext(); // 點擊封面直接翻頁
+        f.innerHTML = `<h2>${titleText}</h2>`;
+        book.appendChild(f);
+
+        urls.forEach(u => {
+            const p = document.createElement('div');
+            p.className = 'page';
+            p.innerHTML = `<img src="${u}">`;
+            book.appendChild(p);
+        });
+
+        // 封底 (縮圖跳頁功能回復)
+        const b = document.createElement('div');
+        b.className = 'page cover-back';
+        let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳頁</div><div class="back-grid">`;
+        ids.forEach((id, i) => {
+            const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}`;
+            thumbHtml += `<div class="thumb" onclick="goToPage(${i+1})"><img src="${t}"></div>`;
+        });
+        thumbHtml += `<div class="thumb" onclick="window.open('${LOGO_URL}')"><img src="${LOGO_URL}"></div></div>`;
+        b.innerHTML = thumbHtml;
+        book.appendChild(b);
+
+        flip = new St.PageFlip(book, { 
+            width: 320, height: 480, 
+            showCover: true, usePortrait: true,
+            flippingTime: 450,
+            drawShadow: false, 
+            showPageCorners: false,
+            disableFlipByClick: false, // 回復點擊翻頁
+            clickEventForward: true
+        });
+        flip.loadFromHTML(document.querySelectorAll('.page'));
+        
+        flip.on('flip', (e) => {
+            const idx = e.data;
+            const tools = document.getElementById('action-tools');
+            underlay.style.opacity = (idx === 0) ? "1" : "0";
+            if (idx > 0 && idx <= urls.length) {
+                document.getElementById('page-num').innerText = `${idx} / ${urls.length}`;
+                tools.style.display = "flex";
+                currentImgUrl = urls[idx - 1];
+            } else {
+                document.getElementById('page-num').innerText = idx === 0 ? "封面" : "封底";
+                tools.style.display = "none";
+            }
+        });
+    }
+
+    // 回復跳頁與功能
+    window.goToPage = (n) => { if(flip) flip.flip(n); };
+    function openFull() { window.open(currentImgUrl, '_blank'); }
+    
+    // 下載功能優化：觸發系統原生選單
+    async function downloadImg() {
+        try {
+            const response = await fetch(currentImgUrl);
+            const blob = await response.blob();
+            const file = new File([blob], "white6_photo.jpg", { type: "image/jpeg" });
+            
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: '下載照片',
+                    text: '儲存照片至您的裝置'
+                });
+            } else {
+                window.open(currentImgUrl, '_blank');
+            }
+        } catch (err) {
+            window.open(currentImgUrl, '_blank');
+        }
+    }
+
+    // 餘下上傳與分享邏輯保持不變...
     document.getElementById('file-input').onchange = async (e) => {
         const files = Array.from(e.target.files);
         const grid = document.getElementById('grid');
@@ -139,81 +221,6 @@
             grid.innerHTML += `<div class="slot"><img src="https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}"></div>`;
         });
     }
-
-    function renderBook(ids, titleText) {
-        document.getElementById('setup-ui').style.display = 'none';
-        document.getElementById('album-view').style.display = 'flex';
-        const book = document.getElementById('book');
-        const underlay = document.getElementById('album-underlay');
-        const urls = ids.map(id => `https://res.cloudinary.com/${CONFIG.name}/image/upload/f_auto,q_auto,w_1000/${id}`);
-
-        // 初始化底圖
-        underlay.innerHTML = `<img src="${urls[0]}">`;
-        underlay.style.opacity = "1";
-
-        // Page 0 (封面)
-        const f = document.createElement('div');
-        f.className = 'page cover-front';
-        f.innerHTML = `<h2>${titleText}</h2>`;
-        book.appendChild(f);
-
-        // 內頁
-        urls.forEach(u => {
-            const p = document.createElement('div');
-            p.className = 'page';
-            p.innerHTML = `<img src="${u}">`;
-            book.appendChild(p);
-        });
-
-        // 封底
-        const b = document.createElement('div');
-        b.className = 'page cover-back';
-        let thumbHtml = `<div style="font-size:14px; opacity:0.5; margin-bottom:15px; text-align:center;">快速跳至該頁</div><div class="back-grid">`;
-        ids.forEach((id, i) => {
-            const t = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_200,c_fill/${id}`;
-            thumbHtml += `<div class="thumb" onclick="goToPage(${i+1})"><img src="${t}"></div>`;
-        });
-        thumbHtml += `<div class="thumb logo-slot" onclick="showLogoFull()"><img src="${LOGO_URL}"></div></div>`;
-        b.innerHTML = thumbHtml;
-        book.appendChild(b);
-
-        flip = new St.PageFlip(book, { 
-            width: 320, height: 480, 
-            showCover: true, usePortrait: true,
-            flippingTime: 400, // 調快動畫時間，減少計算負擔
-            drawShadow: false, // 關閉陰影計算
-            showPageCorners: false,
-            disableFlipByClick: false,
-            mobileScrollSupport: false // 禁用捲動支援，防止觸摸跳動
-        });
-        flip.loadFromHTML(document.querySelectorAll('.page'));
-        
-        flip.on('flip', (e) => {
-            const idx = e.data;
-            const tools = document.getElementById('action-tools');
-            
-            // 修正：當翻開封面時，延遲隱藏底層預覽圖，確保動畫銜接
-            if (idx === 0) {
-                underlay.style.opacity = "1";
-                document.getElementById('page-num').innerText = "封面";
-                tools.style.display = "none";
-            } else if (idx > 0 && idx <= urls.length) {
-                underlay.style.opacity = "0"; // 進入內頁，底圖消失
-                document.getElementById('page-num').innerText = `${idx} / ${urls.length}`;
-                tools.style.display = "flex";
-                currentImgUrl = urls[idx - 1];
-                document.getElementById('dl-link').href = currentImgUrl;
-            } else {
-                underlay.style.opacity = "0";
-                document.getElementById('page-num').innerText = "封底";
-                tools.style.display = "none";
-            }
-        });
-    }
-
-    window.goToPage = (n) => flip.flip(n);
-    window.showLogoFull = () => { window.open(LOGO_URL, '_blank'); };
-    function openFull() { window.open(currentImgUrl, '_blank'); }
 
     async function sendToLine(isForward = false) {
         const name = isForward ? currentAlbumName : (document.getElementById('album-name').value || "白六快傳相簿");
