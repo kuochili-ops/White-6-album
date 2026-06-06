@@ -25,7 +25,6 @@
         .slot.loading { animation: pulse 1.5s infinite; background: #333; border-color: var(--line-green); }
         .slot.loading::after { content: "↑"; color: var(--line-green); font-size: 16px; font-weight: bold; }
         
-        /* 失敗重試按鈕樣式 */
         .retry-btn { background: #ff4d4d; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; z-index: 10; font-weight: bold; }
 
         input { width: 100%; padding: 18px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 16px; outline: none; }
@@ -89,7 +88,7 @@
     const COLORS = ["#FFFFFF", "#00B900", "#FFD700", "#FF6B6B", "#4D96FF", "#9B59B6", "#E67E22"];
     let selectedColor = "#FFFFFF";
     let uploadedIds = []; 
-    let uploadQueue = []; // 用於記錄所有待傳檔案與其對應的格子 ID
+    let uploadQueue = []; 
     let currentImgUrl = "";
     let flip;
     let currentAlbumName = "";
@@ -134,14 +133,50 @@
 
     function updateTitlePreview(val) { document.getElementById('ui-title').innerText = val || "製作新相簿"; }
 
-    // 單張照片上傳核心（含 3 次自動重試機制）
+    // 前端即時壓縮核心邏輯 (Canvas Resizing)
+    function compressImage(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const max_size = 2000; // 限制最大寬高為 2000px
+
+                    if (width > height) {
+                        if (width > max_size) { height *= max_size / width; width = max_size; }
+                    } else {
+                        if (height > max_size) { width *= max_size / height; height = max_size; }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // 輸出為 JPEG 格式，品質設為 0.8
+                    canvas.toBlob((blob) => {
+                        resolve(blob || file);
+                    }, 'image/jpeg', 0.8);
+                };
+            };
+        });
+    }
+
     async function uploadSingleFile(file, slotId, index) {
         const slot = document.getElementById(slotId);
         slot.className = 'slot loading';
         slot.innerHTML = '';
 
+        // 在上傳前先進行無感知的背景壓縮
+        const compressedBlob = await compressImage(file);
+
         const fd = new FormData();
-        fd.append('file', file);
+        fd.append('file', compressedBlob, "upload.jpg");
         fd.append('upload_preset', CONFIG.preset);
 
         let retries = 3;
@@ -155,40 +190,34 @@
                 const d = await r.json();
                 
                 if (d.public_id) {
-                    uploadedIds[index] = d.public_id; // 精確寫入陣列對應位置
+                    uploadedIds[index] = d.public_id;
                     slot.className = 'slot filled';
                     slot.innerHTML = `<img src="${d.secure_url}">`;
-                    return true; // 上傳成功
+                    return true;
                 }
             } catch (err) {
                 console.warn(`Slot-${index} 上傳失敗，剩餘重試次數: ${retries - 1}`, err);
                 retries--;
-                if (retries > 0) await new Promise(res => setTimeout(res, 1000)); // 延遲 1 秒後重試
+                if (retries > 0) await new Promise(res => setTimeout(res, 1000));
             }
         }
 
-        // 3 次都失敗後的 UI 處理
         slot.classList.remove('loading');
         slot.innerHTML = `<button class="retry-btn" onclick="event.stopPropagation(); retryUpload(${index})">重試</button>`;
         return false;
     }
 
-    // 手動單張重試功能
     async function retryUpload(index) {
         const item = uploadQueue[index];
         if (!item) return;
         document.getElementById('send-btn').disabled = true;
         document.getElementById('send-btn').innerText = "補傳中...";
-        
-        const success = await uploadSingleFile(item.file, item.slotId, index);
-        
+        await uploadSingleFile(item.file, item.slotId, index);
         checkUploadStatus();
     }
 
-    // 檢查整體上傳狀態，決定是否開放傳送
     function checkUploadStatus() {
         const totalFiles = uploadQueue.length;
-        // 過濾出有效上傳的 ID 數量（排除未完成或失敗的空項）
         const successCount = uploadedIds.filter(id => id).length; 
 
         if (successCount === totalFiles) {
@@ -210,7 +239,7 @@
         
         const grid = document.getElementById('grid');
         grid.innerHTML = ""; 
-        uploadedIds = new Array(files.length).fill(null); // 初始化固定長度空陣列
+        uploadedIds = new Array(files.length).fill(null);
         uploadQueue = [];
         
         document.getElementById('create-info').style.display = 'block';
@@ -219,7 +248,6 @@
         const minWidth = files.length > 12 ? '50px' : (files.length > 6 ? '70px' : '90px');
         grid.style.gridTemplateColumns = `repeat(auto-fit, minmax(${minWidth}, 1fr))`;
 
-        // 1. 預鋪空格並建立隊列索引
         files.forEach((file, i) => {
             const slotId = `slot-${i}`;
             const slot = document.createElement('div');
@@ -230,17 +258,15 @@
             uploadQueue.push({ file: file, slotId: slotId });
         });
 
-        // 2. 嚴格依序（佇列）上傳，絕不併發，防止 Cloudinary 擋連線
         for (let i = 0; i < uploadQueue.length; i++) {
             const item = uploadQueue[i];
-            document.getElementById('up-btn').innerText = `正在上傳第 ${i+1}/${files.length} 張...`;
+            document.getElementById('up-btn').innerText = `正在處理並上傳第 ${i+1}/${files.length} 張...`;
             await uploadSingleFile(item.file, item.slotId, i);
             checkUploadStatus();
         }
     };
 
     function renderBook(ids, titleText, titleColor) {
-        // 過濾掉可能因為失敗留下的 null 值
         const validIds = ids.filter(id => id);
         if(validIds.length === 0) return;
 
@@ -331,7 +357,6 @@
     }
 
     async function sendToLine(isForward = false) {
-        // 過濾掉可能存在的 null 失敗項，確保丟給 LINE 的都是成功照片
         const finalIds = uploadedIds.filter(id => id);
         if (finalIds.length === 0) return;
 
