@@ -66,10 +66,13 @@
             <p style="font-size: 12px; color: #888; margin-top: 10px;">主題文字顏色：</p>
             <div class="color-picker" id="color-picker"></div>
             <input type="text" id="album-note" placeholder="留言...">
-            <button class="btn" id="send-btn" style="background:#fff; color:#000;" onclick="sendToLine()">搜尋對象並傳送</button>
+            <button class="btn" id="send-btn" style="background:#fff; color:#000;" onclick="sendToLine(false)">搜尋對象並傳送</button>
         </div>
     </div>
-    <div id="forward-mode-ui" style="display:none;"><input type="text" id="forward-note" placeholder="留言..."><button class="btn" onclick="sendToLine(true)">搜尋對象並傳送</button></div>
+    <div id="forward-mode-ui" style="display:none;">
+        <input type="text" id="forward-note" placeholder="對新朋友說的話（選填）...">
+        <button class="btn" onclick="sendToLine(true)">搜尋對象並轉傳</button>
+    </div>
 </div>
 
 <div id="album-view">
@@ -115,13 +118,15 @@
         const mode = params.get('mode');
         let colorParam = params.get('c');
         if (colorParam && !colorParam.startsWith('#')) colorParam = '#' + colorParam;
-        
+        if (colorParam) selectedColor = colorParam; // 如果網址有顏色，同步更新當前選色
+
         currentAlbumName = decodeURIComponent(params.get('name') || "白六相簿");
         
         if (ids) {
             uploadedIds = ids.split(',');
             if (mode === 'forward') {
-                document.getElementById('ui-title').innerText = "轉傳分享相簿";
+                document.getElementById('ui-title').innerText = currentAlbumName;
+                document.getElementById('ui-title').style.color = selectedColor; // 轉傳介面文字顏色同步
                 document.getElementById('create-mode-ui').style.display = 'none';
                 document.getElementById('forward-mode-ui').style.display = 'block';
                 showGridPreview();
@@ -133,7 +138,6 @@
 
     function updateTitlePreview(val) { document.getElementById('ui-title').innerText = val || "製作新相簿"; }
 
-    // 前端即時壓縮核心邏輯 (Canvas Resizing)
     function compressImage(file) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -145,7 +149,7 @@
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
-                    const max_size = 2000; // 限制最大寬高為 2000px
+                    const max_size = 2000;
 
                     if (width > height) {
                         if (width > max_size) { height *= max_size / width; width = max_size; }
@@ -158,7 +162,6 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // 輸出為 JPEG 格式，品質設為 0.8
                     canvas.toBlob((blob) => {
                         resolve(blob || file);
                     }, 'image/jpeg', 0.8);
@@ -172,7 +175,6 @@
         slot.className = 'slot loading';
         slot.innerHTML = '';
 
-        // 在上傳前先進行無感知的背景壓縮
         const compressedBlob = await compressImage(file);
 
         const fd = new FormData();
@@ -360,8 +362,10 @@
         const finalIds = uploadedIds.filter(id => id);
         if (finalIds.length === 0) return;
 
+        // 關鍵修正：如果是轉傳模式，留言讀取轉傳專用的 input 框
         const name = isForward ? currentAlbumName : (document.getElementById('album-name').value || "白六快傳相簿");
-        const note = isForward ? "" : (document.getElementById('album-note').value || "分享一份回憶");
+        const note = isForward ? (document.getElementById('forward-note').value || "分享一份回憶") : (document.getElementById('album-note').value || "分享一份回憶");
+        
         const baseLink = `https://liff.line.me/${CONFIG.liffId}/?ids=${finalIds.join(',')}&name=${encodeURIComponent(name)}&note=${encodeURIComponent(note)}&c=${selectedColor.replace('#', '')}`;
         const coverUrl = `https://res.cloudinary.com/${CONFIG.name}/image/upload/w_500,c_fill,f_auto,q_auto/${finalIds[0]}`;
         
